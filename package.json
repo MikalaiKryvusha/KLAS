@@ -1,0 +1,15 @@
+{
+  "name": "local-ai-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LOCAL NOMAD — Local AI Agent: превращение личного ПК в self-hosted сервер агентского ИИ. Управляется фреймворком KAIF.",
+  "scripts": {
+    "kaif:version": "node tools/kaif.mjs version",
+    "kaif:check": "node tools/kaif.mjs check",
+    "kaif:update": "node tools/kaif.mjs update",
+    "kaif:fork": "node tools/kaif.mjs fork",
+    "kaif:switch-origin": "node tools/kaif.mjs switch-origin",
+    "kaif:remove": "node tools/kaif.mjs remove",
+    "kaif:remove-all": "node tools/kaif.mjs remove-all"
+  }
+}
