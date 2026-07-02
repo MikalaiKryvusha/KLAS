@@ -29,6 +29,7 @@
 ├── CLAUDE.md                            # автозагружаемый контекст Claude Code → указывает на AGENT_GUIDE.md
 ├── AGENTS.md                            # универсальный fallback для других агентских систем
 ├── README.md                            # витрина репозитория: бейджи, логотип, дорожная карта
+├── LICENSE                              # MIT (© 2026 Mikalai Kryvusha) — выбор владельца
 ├── logo/                                # бренд-ассеты: KLAS.jpg (OG 1200×630, hero README), исходники
 ├── package.json                         # kaif:* handles (npm run kaif:version / kaif:check / …)
 ├── .kaif/kaif.json                      # маркер деплоя KAIF: версия, сфера, агент, tracking

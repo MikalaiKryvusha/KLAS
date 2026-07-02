@@ -5,6 +5,7 @@
 ![Платформа](https://img.shields.io/badge/%D0%BF%D0%BB%D0%B0%D1%82%D1%84%D0%BE%D1%80%D0%BC%D0%B0-Windows%2011-0078D6)
 ![GPU](https://img.shields.io/badge/GPU-RTX%205070%20Ti%2016%20GB-76B900)
 ![Статус](https://img.shields.io/badge/%D1%81%D1%82%D0%B0%D1%82%D1%83%D1%81-%D1%84%D0%B0%D0%B7%D0%B0%201%20%C2%B7%20%D1%81%D1%82%D0%B0%D0%B1%D0%B8%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F-orange)
+![Лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-green)
 
 ![KLAS — Кот Криник одобряет](logo/KLAS.jpg)
 
@@ -91,4 +92,4 @@ F:\KLAS\
 
 © 2026 **Mikalai Kryvusha** aka **KOT KRINIK** · Николай Кривуша aka Кот Криник
 
-Лицензия пока не выбрана (решается в `interviews/interview_001_project_setup.md`).
+Лицензия — [MIT](LICENSE).

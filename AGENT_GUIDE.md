@@ -56,7 +56,7 @@
 | **GitHub-репозиторий** | https://github.com/MikalaiKryvusha/KLAS |
 | **Локальная папка проекта** | `F:\KLAS\` |
 | **Автор / владелец** | Николай Кривуша aka Кот Криник (Mikalai Kryvusha aka KOT KRINIK) |
-| **Лицензия** | `TODO — см. interviews/interview_001` (Q2) |
+| **Лицензия** | MIT (© 2026 Mikalai Kryvusha, файл `LICENSE`) |
 
 > История имени: ранняя рабочая директория звалась LOCAL_NOMAD (вдохновение — проект Local Nomad);
 > 2026-07-02 владелец дал системе собственное имя KLAS (см. `GOAL.md`). Встретил старое имя/пути в
