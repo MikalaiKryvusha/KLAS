@@ -4,6 +4,23 @@ node_modules/
 *.log
 logs/
 
+# Инфраструктура рядом с каркасом (идея 03: git = обёртка/фрейм; тяжёлое скачивает deploy).
+# Версионируем только текстовые конфиги: профили запуска llamacpp\bat и Caddyfile.
+/llamacpp/*
+!/llamacpp/bat/
+/LLMs/
+/kiwixdb/
+/homepage/
+/AnythingLLM/
+/caddy/*
+!/caddy/Caddyfile
+/mcp/
+/nssm/
+
+# Исходники логотипа тяжёлые — в git только готовые (KLAS.jpg подключён в README)
+/logo/KLAS.psd
+/logo/KLAS_ORIGIN_2x.png
+
 # Мусор ОС/редакторов
 Thumbs.db
 Desktop.ini

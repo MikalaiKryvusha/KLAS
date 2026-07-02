@@ -54,13 +54,13 @@
 | **Имя / бренд** | KLAS — Krinik Local Agent System |
 | **Короткое имя** | `KLAS` |
 | **GitHub-репозиторий** | https://github.com/MikalaiKryvusha/KLAS |
-| **Локальная папка проекта** | `F:\KLAS\` (⚠️ до запуска миграции физически — `F:\LOCAL_NOMAD\local_ai_agent`; см. `plans/01_klas_migration.md`) |
+| **Локальная папка проекта** | `F:\KLAS\` |
 | **Автор / владелец** | Николай Кривуша aka Кот Криник (Mikalai Kryvusha aka KOT KRINIK) |
 | **Лицензия** | `TODO — см. interviews/interview_001` (Q2) |
 
-> История имени: проект начинался как «LOCAL NOMAD — Local AI Agent» (вдохновение — проект
-> Local Nomad); 2026-07-02 владелец дал системе собственное имя KLAS (`ideas/01_origin_KLAS.md`).
-> Встретил старое имя/пути в документах — нормализуй к KLAS.
+> История имени: ранняя рабочая директория звалась LOCAL_NOMAD (вдохновение — проект Local Nomad);
+> 2026-07-02 владелец дал системе собственное имя KLAS (см. `GOAL.md`). Встретил старое имя/пути в
+> документах — нормализуй к KLAS.
 
 > Держи одно каноническое написание имён/путей/URL и используй его везде. Нашёл старый/переименованный
 > идентификатор в исторических документах — нормализуй к каноническому значению выше.
@@ -97,10 +97,6 @@ F:\KLAS\
 └── nssm\ tailscale_funnel_443.bat ← сервис-менеджер и внешний доступ через Tailscale
 ```
 
-> ⚠️ **До запуска миграции** (`tools/migrate-to-klas.mjs`, запускает владелец) всё это физически лежит
-> в `F:\LOCAL_NOMAD\` (проект — в `F:\LOCAL_NOMAD\local_ai_agent\`). Манифест «что берём / что
-> оставляем» — `plans/01_klas_migration.md`.
-
 **ПРАВИЛО:** документы KAIF (корень) — управляющий центр: он документирует, конфигурирует и проверяет
 инфраструктурные директории, но меняет их только осознанно, точечно и с фиксацией в документах. Один
 источник правды по портам и профилям запуска — карты этого проекта.
@@ -116,7 +112,7 @@ F:\KLAS\
 
 ```powershell
 # запустить текущий профиль LLM-сервера (окно останется открытым):
-F:\LOCAL_NOMAD\llamacpp\bat\gemma4-12b.bat
+F:\KLAS\llamacpp\bat\gemma4-12b.bat
 
 # проверить, что сервер жив (порт по умолчанию llama-server — 8080):
 curl http://127.0.0.1:8080/health
@@ -141,7 +137,7 @@ curl http://127.0.0.1:8080/health
 | `curl http://127.0.0.1:8080/v1/models` | Какая модель загружена |
 | `curl http://127.0.0.1:8080/props` | Реальные параметры сервера (контекст, слоты и т.д.) |
 | `curl -s http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d '{...}'` | Тестовый запрос к модели (OpenAI-совместимый API) |
-| `F:\LOCAL_NOMAD\llamacpp\llama-bench.exe -m <model.gguf>` | Бенчмарк скорости (t/s) модели |
+| `F:\KLAS\llamacpp\llama-bench.exe -m <model.gguf>` | Бенчмарк скорости (t/s) модели |
 | `nvidia-smi` | Занятость VRAM/GPU |
 | `netstat -ano \| findstr :<port>` | Кто слушает порт |
 | `tasklist \| findstr llama` | Запущенные процессы llama |
@@ -170,7 +166,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 ## Push / аутентификация GitHub
 
 Удалённый репозиторий: https://github.com/MikalaiKryvusha/KLAS (создан владельцем 2026-07-02).
-Remote `origin` настраивается скриптом миграции; если не настроен: `gh auth setup-git`,
+Remote `origin` уже настроен; если потерялся: `gh auth setup-git`,
 `git remote add origin https://github.com/MikalaiKryvusha/KLAS.git`, `git push -u origin main`.
 Если push отклонён (non-fast-forward) — `git pull --rebase` → повторить push → сообщить человеку о
 расхождении.
@@ -183,8 +179,7 @@ Remote `origin` настраивается скриптом миграции; е
 |---------|------------|
 | `npm run kaif:version` | Версия развёрнутого KAIF (из `.kaif/kaif.json`) |
 | `npm run kaif:check` | Проверка целостности развёрнутой структуры KAIF |
-| `F:\LOCAL_NOMAD\llamacpp\bat\gemma4-12b.bat` | Запуск текущего профиля LLM-сервера |
-| `node tools/migrate-to-klas.mjs [--apply]` | Миграция LOCAL_NOMAD → F:\KLAS (без флага — dry-run; запускает ВЛАДЕЛЕЦ) |
+| `F:\KLAS\llamacpp\bat\gemma4-12b.bat` | Запуск текущего профиля LLM-сервера |
 
 > Добавил или расширил инструмент — добавь строку сюда.
 
