@@ -1,13 +1,13 @@
+<p align="center">
+  <img src="logo/KLAS.jpg" alt="KLAS — Krinik Local Agent System" width="640">
+</p>
+
 # KLAS — Krinik Local Agent System
 
-![Язык](https://img.shields.io/badge/%D1%8F%D0%B7%D1%8B%D0%BA-%D1%80%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-blue)
-![KAIF](https://img.shields.io/badge/%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D1%8F%D0%B5%D1%82%D1%81%D1%8F-KAIF%20v1.1-8A2BE2)
-![Платформа](https://img.shields.io/badge/%D0%BF%D0%BB%D0%B0%D1%82%D1%84%D0%BE%D1%80%D0%BC%D0%B0-Windows%2011-0078D6)
-![GPU](https://img.shields.io/badge/GPU-RTX%205070%20Ti%2016%20GB-76B900)
-![Статус](https://img.shields.io/badge/%D1%81%D1%82%D0%B0%D1%82%D1%83%D1%81-%D1%84%D0%B0%D0%B7%D0%B0%201%20%C2%B7%20%D1%81%D1%82%D0%B0%D0%B1%D0%B8%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F-orange)
-![Лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-green)
-
-![KLAS — Кот Криник одобряет](logo/KLAS.jpg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-FF1A8C.svg)](LICENSE)
+[![Framework](https://img.shields.io/badge/Framework-KAIF%201.1-7F52FF.svg)](https://github.com/MikalaiKryvusha/KAIF)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2011-0078D6.svg)](#дом-системы)
+[![GPU](https://img.shields.io/badge/GPU-RTX%205070%20Ti%2016%20GB-76B900.svg)](#что-внутри)
 
 **KLAS** — self-hosted экосистема агентского ИИ на личном ПК: локальная LLM на геймерской GPU,
 автономные агенты, веб-дашборд управления и оффлайн-база знаний (локальная википедия). Полная
