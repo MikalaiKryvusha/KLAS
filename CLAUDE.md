@@ -1,4 +1,4 @@
-# LOCAL NOMAD — Local AI Agent
+# KLAS — Krinik Local Agent System
 
 Проект управляется фреймворком **KAIF** (см. `KAIF_FRAMEWORK.md`).
 

@@ -1,4 +1,4 @@
-# LOCAL NOMAD — Local AI Agent — контекст для ИИ-агентов
+# KLAS — Krinik Local Agent System — контекст для ИИ-агентов
 
 Универсальный входной файл для любой агентской системы (fallback-адаптер KAIF). Проект управляется
 фреймворком **KAIF** (см. `KAIF_FRAMEWORK.md`).

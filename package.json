@@ -1,8 +1,9 @@
 {
-  "name": "local-ai-agent",
+  "name": "klas",
   "version": "0.1.0",
   "private": true,
-  "description": "LOCAL NOMAD — Local AI Agent: превращение личного ПК в self-hosted сервер агентского ИИ. Управляется фреймворком KAIF.",
+  "description": "KLAS (Krinik Local Agent System) — self-hosted AI ecosystem: local LLM on gaming GPU, autonomous agents, web dashboard, offline knowledge base. KAIF-powered.",
+  "repository": "https://github.com/MikalaiKryvusha/KLAS",
   "scripts": {
     "kaif:version": "node tools/kaif.mjs version",
     "kaif:check": "node tools/kaif.mjs check",
