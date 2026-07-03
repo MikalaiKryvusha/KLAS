@@ -1,0 +1,25 @@
+{
+    auto_https off
+}
+
+:443 {
+    # Общая авторизация на ВЕСЬ сайт (basicauth БЕЗ путевого матчера = все запросы).
+    # Скопируй этот файл в caddy/Caddyfile и подставь свой хеш:
+    #   docker exec caddy caddy hash-password --plaintext <твой-пароль>
+    # Реальный Caddyfile и пароль в git НЕ попадают (.gitignore).
+    basicauth {
+        kryvusha {ВСТАВЬ_BCRYPT_ХЕШ}
+    }
+
+    redir /wiki /wiki/
+    redir /homepage /homepage/
+
+    # Википедия (Kiwix; внутри docker-сети порт 8080, host-порт 8081 — см. docker-compose.yml)
+    handle /wiki* {
+        reverse_proxy kiwix_wikipedia:8080
+    }
+
+    handle /homepage* {
+        reverse_proxy homepage:3000
+    }
+}

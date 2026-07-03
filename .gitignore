@@ -15,8 +15,9 @@ logs/
 /homepage/config/*
 !/homepage/config/*.yaml
 /AnythingLLM/
+# Caddyfile содержит хеш пароля — в git только шаблон Caddyfile.example (инцидент 2026-07-03)
 /caddy/*
-!/caddy/Caddyfile
+!/caddy/Caddyfile.example
 /mcp/
 /nssm/
 
