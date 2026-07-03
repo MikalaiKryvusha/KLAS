@@ -1,0 +1,29 @@
+# llama-swap — менеджер «спит, пока не позовут» для LLM-серверов KLAS (Фаза 4).
+# Слушает 127.0.0.1:8080 (тот же порт, что раньше держал llama-server напрямую, — Zoo Code и
+# другие OpenAI-клиенты работают без изменений). По полю `model` запроса llama-swap сам
+# запускает нужный llama-server (порт ${PORT} назначает автоматически) и выгружает его после
+# простоя ttl секунд — VRAM свободна, пока ИИ не позвали.
+#
+# Запуск:   llama-swap -config F:\KLAS\llama-swap\config.yaml -listen 127.0.0.1:8080
+# Проверка: powershell -File F:\KLAS\tools\health-check.ps1
+# Ручной запуск сервера БЕЗ llama-swap: F:\KLAS\llamacpp\bat\gemma4-12b.bat (конфликтуют за 8080 —
+# одновременно не запускать).
+
+macros:
+  # Общие параметры сервера — один источник правды, совпадает с bat-профилем (баг 01)
+  gemma-args: >
+    -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+    -np 1 --slots --cont-batching
+    --temperature 0.6 --min-p 0.05
+    --repeat-penalty 1.2 --repeat-last-n 512
+    --frequency-penalty 0.15 --presence-penalty 0.2
+    --reasoning off --cache-ram 0
+
+models:
+  "gemma-4-12b":
+    # -c 131072: KV целиком в VRAM (~12.5 GB), запас ~3.8 GB — выбор в пользу стабильности (баг 01)
+    cmd: >
+      F:\KLAS\llamacpp\llama-server.exe
+      -m F:\KLAS\LLMs\LLAMACPP_MODELS\gemma-4-12b-it-UD-Q4_K_XL.gguf
+      --port ${PORT} -c 131072 ${gemma-args}
+    ttl: 300  # секунд простоя до выгрузки модели из VRAM («сон»)
