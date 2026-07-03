@@ -5,24 +5,31 @@
 # простоя ttl секунд — VRAM свободна, пока ИИ не позвали.
 #
 # Запуск:   llama-swap -config F:\KLAS\llama-swap\config.yaml -listen 127.0.0.1:8080
-# Проверка: powershell -File F:\KLAS\tools\health-check.ps1
-# Ручной запуск сервера БЕЗ llama-swap: F:\KLAS\llamacpp\bat\gemma4-12b.bat (конфликтуют за 8080 —
-# одновременно не запускать).
-
-macros:
-  # Общие параметры сервера — один источник правды, совпадает с bat-профилем (баг 01)
-  gemma-args: >
-    -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
-    -np 1 --slots --cont-batching
-    --temperature 0.6 --min-p 0.05
-    --repeat-penalty 1.2 --repeat-last-n 512
-    --frequency-penalty 0.15 --presence-penalty 0.2
-    --reasoning off --cache-ram 0
+# Проверка: powershell -File F:\KLAS\tools\health-check.ps1 | веб-UI: http://127.0.0.1:8080/ui/
+#
+# Все контексты выставлены под приоритет владельца (идея 07): БОЛЬШЕ ПАМЯТИ. KV-кеш квантуется в
+# q8_0 (безопасно для агентики, researches/02) — это ~2x к вместимости контекста. Каждый профиль
+# проверен на влезаемость в 16 ГБ VRAM (замеры 2026-07-03) — стабильность важнее скорости/контекста.
+# thinking отключён везде (--chat-template-kwargs): агентским клиентам нужен чистый ответ, а не
+# «размышления» в поле reasoning_content (иначе при малом max_tokens ответ приходит пустым).
 
 models:
-  # ОСНОВНАЯ модель KLAS (интервью 002 Q1 = A, 2026-07-03): MoE 35B-A3B, целиком в VRAM.
-  # -c 98304 + KV q8_0: владелец просил больше контекста; q8_0-квант KV безопасен для агентики
-  # (researches/02), даёт ~2x к вместимости контекста. llama-swap свопит модели по полю model.
+  # ⭐ Qwythos-9B (Claude-Mythos-5), обучена на контекст 1M. РЕКОМЕНДУЕТСЯ КАК ОСНОВНАЯ (идея 07):
+  # 256K контекста стабильно (VRAM 12.7 ГБ), agent-bench 6/6, needle на 148K ✅, генерация ~67-98 t/s.
+  # Прямой ответ на «не хватает памяти»: окно в 2.6x больше qwen3.5. (1M не влезает: KV на 1M токенов
+  # физически больше 16 ГБ VRAM; 256K — безопасный максимум с запасом.)
+  "qwythos-9b":
+    cmd: >
+      F:\KLAS\llamacpp\llama-server.exe
+      -m F:\KLAS\LLMs\LLAMACPP_MODELS\Qwythos-9B-Claude-Mythos-5-1M-Q5_K_M.gguf
+      --port ${PORT} -c 262144 -ctk q8_0 -ctv q8_0
+      -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+      -np 1 --slots --cont-batching
+      --chat-template-kwargs "{\"enable_thinking\": false}"
+    ttl: 300
+
+  # MoE 35B-A3B: самый «умный класс» из наших, быстрая (155 t/s). Контекст 98K (KV q8_0, VRAM ~15.6).
+  # Вариант «ум важнее скорости»: скорости с избытком, память ограничена VRAM 16 ГБ.
   "qwen3.5-35b":
     cmd: >
       F:\KLAS\llamacpp\llama-server.exe
@@ -33,22 +40,25 @@ models:
       --chat-template-kwargs "{\"enable_thinking\": false}"
     ttl: 300
 
-  # Кандидат Фазы 2b: плотная 27B в IQ3_XXS (3.06 bpw — нижняя граница разумного квантования).
-  # ctx 32768: плотный KV прожорливее MoE; вес 11.17 GB + KV + буферы ≈ 14.5 GB.
+  # Плотная 27B IQ3_XXS. Контекст поднят 32768 → 65536 (KV q8_0, VRAM 14.9) — ФИКС ошибки 400 из
+  # Zoo Code (запрос 53854 токенов больше не падает). Медленная (52 t/s), квант на нижней границе.
   "qwen3.6-27b":
     cmd: >
       F:\KLAS\llamacpp\llama-server.exe
       -m F:\KLAS\LLMs\LLAMACPP_MODELS\Qwen3.6-27B-UD-IQ3_XXS.gguf
-      --port ${PORT} -c 32768 -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+      --port ${PORT} -c 65536 -ctk q8_0 -ctv q8_0
+      -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
       -np 1 --slots --cont-batching
       --chat-template-kwargs "{\"enable_thinking\": false}"
     ttl: 300
 
+  # gemma-4-12b: запасная + мультимодальная (зрение — задел под Jarvis, идея 05). Контекст 131K.
   "gemma-4-12b":
-    # -c 131072: KV целиком в VRAM (~12.5 GB), запас ~3.8 GB — выбор в пользу стабильности (баг 01)
     cmd: >
       F:\KLAS\llamacpp\llama-server.exe
       -m F:\KLAS\LLMs\LLAMACPP_MODELS\gemma-4-12b-it-UD-Q4_K_XL.gguf
-      --port ${PORT} -c 131072 ${gemma-args}
-    ttl: 300  # секунд простоя до выгрузки модели из VRAM («сон»); ttl проверен 2026-07-03.
-              # Замечание: опросы админ-эндпоинтов (/running) могут сбрасывать таймер простоя.
+      --port ${PORT} -c 131072 -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+      -np 1 --slots --cont-batching
+      --temperature 0.6 --min-p 0.05 --repeat-penalty 1.2 --repeat-last-n 512
+      --frequency-penalty 0.15 --presence-penalty 0.2 --reasoning off --cache-ram 0
+    ttl: 300
