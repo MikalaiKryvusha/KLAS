@@ -28,6 +28,26 @@ services:
 #     environment:
 #       - STORAGE_DIR=/app/server/storage
 
+  # Open WebUI — гостевой ChatGPT-подобный чат для родных (идея 09): личные аккаунты + авторизация
+  # (приватные чаты у каждого), подключён к нашему LLM через OpenAI-API llama-swap на хосте.
+  # llama-swap на host:8080 (прямой доступ, без auth — авторизацию пользователей держит сам Open WebUI).
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3080:8080"
+    volumes:
+      - "F:/KLAS/open-webui/data:/app/backend/data"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1
+      - OPENAI_API_KEY=klas-local            # llama-swap на :8080 без auth — ключ формальный
+      - ENABLE_OLLAMA_API=false              # используем только OpenAI-совместимый бэкенд (llama-swap)
+      - WEBUI_AUTH=true                      # личные аккаунты + логин (родные не видят чужие чаты)
+      - WEBUI_NAME=KLAS Chat
+    restart: unless-stopped
+
   # НОВЫЙ блок Homepage (исправленный)
   homepage:
     image: ghcr.io/gethomepage/homepage:latest

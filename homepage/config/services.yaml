@@ -3,6 +3,13 @@
 # siteMonitor пингуется ИЗ docker-контейнера homepage → хост-сервисы через host.docker.internal,
 # docker-сервисы — по именам контейнеров. href открывается в браузере владельца (локальные URL).
 
+- 💬 Чат для родных:
+    - KLAS Chat (Open WebUI):
+        href: "http://127.0.0.1:3080/"
+        description: Простой ChatGPT-подобный чат · личные аккаунты · приватные чаты
+        siteMonitor: "http://open-webui:8080/health"
+        icon: mdi-chat-processing
+
 - 🧠 Локальный ИИ (LLM):
     - Пульт моделей (llama-swap):
         href: "http://127.0.0.1:8080/ui/"
