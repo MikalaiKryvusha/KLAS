@@ -52,6 +52,19 @@ models:
       --chat-template-kwargs "{\"enable_thinking\": false}"
     ttl: 300
 
+  # Ornith-1.0-35B (MoE A3B, SWE-bench 75.6): умная, генерация быстрая (117 t/s), НО медленный
+  # prompt-processing (needle-16K ~214 с) → для коротких задач/чата, не для длинных агентных промптов.
+  # ctx 49152 (KV q8_0) — запас VRAM. Кандидат «ум», добавлен по идее 08.
+  "ornith-35b":
+    cmd: >
+      F:\KLAS\llamacpp\llama-server.exe
+      -m F:\KLAS\LLMs\LLAMACPP_MODELS\Ornith-1.0-35B-IQ3_XXS.gguf
+      --port ${PORT} -c 49152 -ctk q8_0 -ctv q8_0
+      -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+      -np 1 --slots --cont-batching
+      --chat-template-kwargs "{\"enable_thinking\": false}"
+    ttl: 300
+
   # gemma-4-12b: запасная + мультимодальная (зрение — задел под Jarvis, идея 05). Контекст 131K.
   "gemma-4-12b":
     cmd: >
