@@ -20,6 +20,16 @@ macros:
     --reasoning off --cache-ram 0
 
 models:
+  # Кандидат Фазы 2b (researches/02): MoE 35B-A3B, целиком в VRAM. llama-swap сам свопит
+  # модели: запрос с model=qwen3.5-35b выгрузит gemma и загрузит qwen (и наоборот).
+  "qwen3.5-35b":
+    cmd: >
+      F:\KLAS\llamacpp\llama-server.exe
+      -m F:\KLAS\LLMs\LLAMACPP_MODELS\Qwen3.5-35B-A3B-UD-IQ3_S.gguf
+      --port ${PORT} -c 65536 -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+      -np 1 --slots --cont-batching
+    ttl: 300
+
   "gemma-4-12b":
     # -c 131072: KV целиком в VRAM (~12.5 GB), запас ~3.8 GB — выбор в пользу стабильности (баг 01)
     cmd: >
