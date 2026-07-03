@@ -26,11 +26,21 @@
 
 ## Где мы сейчас
 
-**2026-07-03 — исследование Фазы 2 выполнено:** `researches/02_optimal_stack_2026.md` (5 углов,
-22 источника, 107 фактов; ⚠️ верификационная фаза упала по сессионному лимиту — факты сырые,
-решающие цифры проверяем локальным бенчем). Рекомендация: llama-server (свежий, sm_120) +
-**llama-swap** («спит, пока не позовут») + Cline; модели-кандидаты: Qwen3.5/3.6-35B-A3B UD-IQ3_S,
-Qwen3-Coder-30B UD-Q5, GPT-OSS 20B. Решение владельца: сначала исследование, потом настройка.
+**2026-07-03 — идея 07 выполнена ПОЛНОСТЬЮ + релиз MVP 0.1** (`ideas/07_DONE_remote_api_access.md`,
+`plans/03_remote_and_mvp.md`):
+- **Удалённый доступ** к LLM-API через интернет: `https://krinikspc.forest-ratio.ts.net/llm/v1` +
+  Bearer-ключ (Caddy `/llm` → llama-swap; ключ в `caddy/PASSWORD.local.txt`; Zoo Code — `homeworks/01`).
+- **Контекст расширен** (главный крик владельца): **Qwythos-9B — основная, 256K** (needle 148K ✅,
+  agent-bench 6/6); qwen3.6 400 исправлен (→64K); все модели KV q8_0. Модели в `llama-swap/config.yaml`.
+- **KAIF 1.2**: маркер, скиллы `/fix-vision` `/what-next`, Zoo Code-адаптер (`.roo/rules/kaif.md`
+  авто-подгружает канон — лечит «модели забывают KAIF»).
+- **KLAS ≠ KAIF**: KAIF вынесен из git-трекинга (3rd-party dev-фреймворк; файлы на диске, деплой
+  умеет `--with-kaif`). См. принцип в `GOAL.md`.
+- **Инструменты**: `tools/anonymize.mjs` (анонимный деплой), `tools/leaderboard.mjs` (свежие модели
+  из HF API), `tools/sync-zoo-code.mjs`, автостарт llama-swap (`tools/install-autostart.ps1`).
+- Исследования: `researches/03` (кванты GGUF), `04` (архитектуры), `05` (датасеты/лидерборды).
+
+Прошлый контекст (Фаза 2 исследование) — в `researches/02_optimal_stack_2026.md`.
 
 **Видение оформлено идеями владельца:**
 - `ideas/03_klas_single_unit_self_deploy.md` — KLAS = одна законченная единица; репозиторий —
