@@ -139,6 +139,8 @@ curl http://127.0.0.1:8080/health
 | Команда | Что делает |
 |---------|------------|
 | `powershell -File F:\KLAS\tools\health-check.ps1` | ВСЁ здоровье стека одной командой: порт, процессы, /health, /props, /v1/models, VRAM |
+| `powershell -File F:\KLAS\tools\bench-model.ps1 -Model <gguf>` | Скорость модели: pp512/tg128 (llama-bench, GPU, FA) |
+| `node tools/agent-bench.mjs <model>` | Агентная пригодность: 6 pass/fail задач через OpenAI API (инструкции, JSON, tool call, русский, needle, код) |
 | `curl http://127.0.0.1:8080/health` | Жив ли LLM-сервер |
 | `curl http://127.0.0.1:8080/v1/models` | Какая модель загружена |
 | `curl http://127.0.0.1:8080/props` | Реальные параметры сервера (контекст, слоты и т.д.) |
