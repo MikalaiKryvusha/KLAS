@@ -191,6 +191,7 @@ Remote `origin` уже настроен; если потерялся: `gh auth s
 | `powershell -File F:\KLAS\tools\health-check.ps1` | Здоровье LLM-стека одной командой |
 | `node tools/deploy.mjs [--apply]` | Самораскрытие KLAS по манифесту `tools/deploy.manifest.json` (идемпотентно; без флага — dry-run) |
 | `llama-swap -config F:\KLAS\llama-swap\config.yaml -listen 127.0.0.1:8080` | Менеджер «спит, пока не позовут» (порт 8080, автовыгрузка ttl=300с) |
+| http://127.0.0.1:8080/ui/ | Встроенный веб-UI llama-swap: модели, загрузка/выгрузка, логи, метрики (`/ui/#/performance`) — готовый «пульт» LLM-части (Фаза 5) |
 
 > Добавил или расширил инструмент — добавь строку сюда.
 
