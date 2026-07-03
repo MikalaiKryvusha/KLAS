@@ -7,7 +7,9 @@ services:
     volumes:
       - "F:/KLAS/KiwixDB/:/data"
     ports:
-      - "8080:8080"
+      # host-порт 8081: порт 8080 хоста закреплён за llama-server (баг 01 — конфликт портов).
+      # Внутри docker-сети kiwix остаётся на 8080 — Caddy проксирует на kiwix_wikipedia:8080.
+      - "8081:8080"
     command: "--urlRoot /wiki/ *.zim"
     restart: unless-stopped
 

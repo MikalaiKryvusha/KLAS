@@ -119,8 +119,13 @@ curl http://127.0.0.1:8080/health
 ```
 
 Особенности окружения:
-- ⚠️ Порт 8080 также маппится docker-контейнером kiwix (`docker-compose.yml`) — возможен конфликт;
-  всегда проверяй, кто слушает порт: `netstat -ano | findstr :8080`.
+- Порт 8080 закреплён за llama-server; kiwix с 2026-07-03 маппится на host-порт **8081**
+  (`docker-compose.yml`; внутри docker-сети остался 8080, Caddy не тронут). Проверка порта:
+  `netstat -ano | findstr :8080`.
+- ⚠️ На машине включена защита Windows `NoDefaultCurrentDirectoryInExePath=1`: cmd/bat НЕ ищут
+  exe в текущей папке — в bat-файлах вызывай исполняемые файлы ПОЛНЫМ путём.
+- ⚠️ Файлы `.bat` — только с CRLF-окончаниями строк (LF ломает парсер cmd); файлы `.ps1` с
+  кириллицей — UTF-8 **с BOM** (иначе PowerShell 5.1 читает их как ANSI).
 - GPU: RTX 5070 Ti **16 GB VRAM** — бюджет для модель+KV-кеш. Проверка занятости: `nvidia-smi`.
 - Не запускай второй llama-server поверх работающего — сначала проверь `/health` и процессы.
 
@@ -133,6 +138,7 @@ curl http://127.0.0.1:8080/health
 
 | Команда | Что делает |
 |---------|------------|
+| `powershell -File F:\KLAS\tools\health-check.ps1` | ВСЁ здоровье стека одной командой: порт, процессы, /health, /props, /v1/models, VRAM |
 | `curl http://127.0.0.1:8080/health` | Жив ли LLM-сервер |
 | `curl http://127.0.0.1:8080/v1/models` | Какая модель загружена |
 | `curl http://127.0.0.1:8080/props` | Реальные параметры сервера (контекст, слоты и т.д.) |
@@ -179,7 +185,8 @@ Remote `origin` уже настроен; если потерялся: `gh auth s
 |---------|------------|
 | `npm run kaif:version` | Версия развёрнутого KAIF (из `.kaif/kaif.json`) |
 | `npm run kaif:check` | Проверка целостности развёрнутой структуры KAIF |
-| `F:\KLAS\llamacpp\bat\gemma4-12b.bat` | Запуск текущего профиля LLM-сервера |
+| `F:\KLAS\llamacpp\bat\gemma4-12b.bat` | Запуск текущего профиля LLM-сервера (порт 8080, ctx 131072) |
+| `powershell -File F:\KLAS\tools\health-check.ps1` | Здоровье LLM-стека одной командой |
 
 > Добавил или расширил инструмент — добавь строку сюда.
 
