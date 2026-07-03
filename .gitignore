@@ -25,8 +25,12 @@ logs/
 /logo/KLAS.psd
 /logo/KLAS_ORIGIN_2x.png
 
-# Клиентские папки агентских фронтендов (Zoo Code/Roo/Cline) — не часть KLAS
-/.roo/
+# Zoo Code: трекаем сгенерированный адаптер KAIF (команды + автоправила), игнорим транзитное
+# состояние клиента (mcp-настройки, история и т.п.). Команды пересобираются: node tools/sync-zoo-code.mjs
+/.roo/*
+!/.roo/commands/
+!/.roo/rules/
+/.roo/skills/
 
 # Мусор ОС/редакторов
 Thumbs.db

@@ -40,6 +40,7 @@ if (cmd === 'version') {
     'resume', 'pause', 'autoloop', 'dayloop', 'nightloop', 'refresh-context', 'check-backlog',
     'report-bug', 'bug-research', 'propose-idea', 'interview', 'revision', 'help-kaif', 'release',
     'kaif-version', 'kaif-update', 'kaif-fork', 'kaif-switch-origin', 'kaif-remove',
+    'fix-vision', 'what-next',  // добавлены в KAIF 1.2
   ];
   let ok = true;
   const miss = (what) => { console.error(`✖ отсутствует: ${what}`); ok = false; };
