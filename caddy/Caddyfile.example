@@ -3,23 +3,31 @@
 }
 
 :443 {
-    # Общая авторизация на ВЕСЬ сайт (basicauth БЕЗ путевого матчера = все запросы).
-    # Скопируй этот файл в caddy/Caddyfile и подставь свой хеш:
-    #   docker exec caddy caddy hash-password --plaintext <твой-пароль>
-    # Реальный Caddyfile и пароль в git НЕ попадают (.gitignore).
-    basicauth {
-        kryvusha {ВСТАВЬ_BCRYPT_ХЕШ}
+    # === LLM API — удалённый доступ (OpenAI-совместимый, для Zoo Code/Cline через интернет) ===
+    # Base URL клиента: https://<твоя-машина>.ts.net/llm/v1 · API Key = <ключ ниже>.
+    # handle_path срезает /llm → llama-swap на хосте (host.docker.internal:8080) видит /v1/...
+    # Сгенерируй сильный ключ: node -e "console.log('klas-'+require('crypto').randomBytes(30).toString('base64url'))"
+    handle_path /llm/* {
+        route {
+            @unauthorized not header Authorization "Bearer {ВСТАВЬ_API_КЛЮЧ}"
+            respond @unauthorized "Unauthorized: provide Bearer API key" 401
+            reverse_proxy host.docker.internal:8080
+        }
     }
 
-    redir /wiki /wiki/
-    redir /homepage /homepage/
-
-    # Википедия (Kiwix; внутри docker-сети порт 8080, host-порт 8081 — см. docker-compose.yml)
-    handle /wiki* {
-        reverse_proxy kiwix_wikipedia:8080
-    }
-
-    handle /homepage* {
-        reverse_proxy homepage:3000
+    # === Остальной сайт (Kiwix-википедия, Homepage) — basicauth ===
+    # Хеш пароля: docker exec caddy caddy hash-password --plaintext <пароль>
+    handle {
+        basicauth {
+            kryvusha {ВСТАВЬ_BCRYPT_ХЕШ}
+        }
+        redir /wiki /wiki/
+        redir /homepage /homepage/
+        handle /wiki* {
+            reverse_proxy kiwix_wikipedia:8080
+        }
+        handle /homepage* {
+            reverse_proxy homepage:3000
+        }
     }
 }

@@ -25,6 +25,9 @@ logs/
 /logo/KLAS.psd
 /logo/KLAS_ORIGIN_2x.png
 
+# Клиентские папки агентских фронтендов (Zoo Code/Roo/Cline) — не часть KLAS
+/.roo/
+
 # Мусор ОС/редакторов
 Thumbs.db
 Desktop.ini

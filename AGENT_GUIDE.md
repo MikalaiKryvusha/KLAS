@@ -192,6 +192,8 @@ Remote `origin` уже настроен; если потерялся: `gh auth s
 | `node tools/deploy.mjs [--apply]` | Самораскрытие KLAS по манифесту `tools/deploy.manifest.json` (идемпотентно; без флага — dry-run) |
 | `llama-swap -config F:\KLAS\llama-swap\config.yaml -listen 127.0.0.1:8080` | Менеджер «спит, пока не позовут» (порт 8080, автовыгрузка ttl=300с) |
 | http://127.0.0.1:8080/ui/ | Встроенный веб-UI llama-swap: модели, загрузка/выгрузка, логи, метрики (`/ui/#/performance`) — готовый «пульт» LLM-части (Фаза 5) |
+| `tailscale_funnel_443.bat` | Публичный HTTPS-доступ через Tailscale Funnel → Caddy (:443) |
+| Удалённый LLM-API | `https://krinikspc.forest-ratio.ts.net/llm/v1` + Bearer-ключ (Zoo Code с любого ПК; ключ в `caddy/PASSWORD.local.txt`; настройка — `homeworks/01`) |
 
 > Добавил или расширил инструмент — добавь строку сюда.
 
