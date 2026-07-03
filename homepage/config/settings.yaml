@@ -1,0 +1,16 @@
+---
+# For configuration options and examples, please see:
+# https://gethomepage.dev/configs/settings/
+
+providers:
+  openweathermap: openweathermapapikey
+  weatherapi: weatherapiapikey
+
+# Исправление ошибки Host validation failed
+disableHostValidation: true
+
+# Дополнительные настройки для работы в Docker на Windows
+allowIframe: true
+host: 0.0.0.0
+
+base: https://krinikspc.forest-ratio.ts.net/homepage

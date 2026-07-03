@@ -1,0 +1,14 @@
+---
+# For configuration options and examples, please see:
+# https://gethomepage.dev/configs/info-widgets/
+
+- resources:
+    label: "Система"
+    cpu: true
+    memory: true
+    uptime: true        # Сколько комп работает без перезагрузки
+    
+
+- search:
+    provider: duckduckgo
+    target: _blank

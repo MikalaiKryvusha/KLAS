@@ -10,7 +10,10 @@ logs/
 !/llamacpp/bat/
 /LLMs/
 /kiwixdb/
-/homepage/
+/homepage/*
+!/homepage/config/
+/homepage/config/*
+!/homepage/config/*.yaml
 /AnythingLLM/
 /caddy/*
 !/caddy/Caddyfile
