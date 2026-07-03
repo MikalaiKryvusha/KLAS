@@ -25,12 +25,20 @@ logs/
 /logo/KLAS.psd
 /logo/KLAS_ORIGIN_2x.png
 
-# Zoo Code: трекаем сгенерированный адаптер KAIF (команды + автоправила), игнорим транзитное
-# состояние клиента (mcp-настройки, история и т.п.). Команды пересобираются: node tools/sync-zoo-code.mjs
-/.roo/*
-!/.roo/commands/
-!/.roo/rules/
-/.roo/skills/
+# ── KAIF — вспомогательный dev-фреймворк, 3rd-party (идея 07) ─────────────────
+# KLAS и KAIF — ДВЕ НЕЗАВИСИМЫЕ СУЩНОСТИ. KAIF развёрнут здесь ЛОКАЛЬНО в помощь разработке KLAS,
+# но в репозиторий KLAS не упаковывается (как любая 3rd-party библиотека — ссылаемся и разворачиваем
+# локально, см. tools/deploy.mjs). Файлы KAIF физически остаются на диске, но вне git-трекинга.
+/.kaif/
+/.claude/
+/.roo/
+KAIF_FRAMEWORK.md
+AGENT_GUIDE.md
+PHILOSOPHY.md
+BUG_FIXING_FRAMEWORK.md
+AGENTS.md
+CLAUDE.md
+/tools/kaif.mjs
 
 # Мусор ОС/редакторов
 Thumbs.db
