@@ -1,0 +1,39 @@
+{
+  "$comment": "Манифест самораскрытия KLAS (план 02, идея 03): что нужно системе, откуда качать, чем проверять. Снимок живой системы от 2026-07-03. Пины версий меняются осознанным коммитом.",
+  "items": {
+    "llamacpp": {
+      "kind": "github-release",
+      "repo": "ggml-org/llama.cpp",
+      "tag": "b9538",
+      "assets": [
+        "llama-b9538-bin-win-cuda-13.3-x64.zip",
+        "cudart-llama-bin-win-cuda-13.3-x64.zip"
+      ],
+      "dest": "llamacpp",
+      "check": { "file": "llamacpp/llama-server.exe" }
+    },
+    "model-gemma-4-12b": {
+      "kind": "url",
+      "url": "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/gemma-4-12b-it-UD-Q4_K_XL.gguf",
+      "sha256": "EE33AB5BE8E07ACA1C269FC645EAED5F3298E089D52DB29415839D8F29957020",
+      "dest": "LLMs/LLAMACPP_MODELS/gemma-4-12b-it-UD-Q4_K_XL.gguf",
+      "check": { "file": "LLMs/LLAMACPP_MODELS/gemma-4-12b-it-UD-Q4_K_XL.gguf", "sizeBytes": 7366421920 }
+    },
+    "llama-swap": {
+      "kind": "winget",
+      "id": "mostlygeek.llama-swap",
+      "check": { "command": "llama-swap --version" }
+    },
+    "docker-stack": {
+      "kind": "compose",
+      "file": "docker-compose.yml",
+      "optional": true,
+      "check": { "command": "docker compose -f docker-compose.yml config -q" }
+    }
+  },
+  "$todo": [
+    "kiwix-zim: какой .zim википедии качать по умолчанию — вопрос владельцу (интервью 001 Q4)",
+    "sha256 у model-gemma-4-12b снят с живого файла; проверить размер после первого скачивания deploy'ем",
+    "модель(и) по умолчанию — пересмотреть по итогам Фазы 2b"
+  ]
+}
