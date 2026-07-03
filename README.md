@@ -2,6 +2,10 @@
   <img src="logo/KLAS.jpg" alt="KLAS — Krinik Local Agent System" width="640">
 </p>
 
+<p align="center">
+  <img src="logo/klas-cat.svg" alt="KLAS — Кот Криник (логотип)" width="128">
+</p>
+
 # KLAS — Krinik Local Agent System
 
 <p align="center">
