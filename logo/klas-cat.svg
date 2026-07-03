@@ -1,26 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- KLAS favicon — Кот Криник: смышлёная смуглая морда табби, флэт-вектор, читается в 16px -->
+  <!-- KLAS favicon — Кот Криник. Порядок слоёв: уши рисуются ПЕРВЫМИ, голова поверх перекрывает их
+       основание → уши прорастают из головы без щели. Усы/вибрисы тёмные и толстые, чтобы переживать
+       растеризацию в 16/32px. -->
   <rect width="64" height="64" rx="14" fill="#2b2440"/>
-  <!-- уши -->
-  <path d="M14 20 L20 6 L30 18 Z" fill="#8a8a92"/>
-  <path d="M50 20 L44 6 L34 18 Z" fill="#8a8a92"/>
-  <path d="M17 18 L20 10 L25 17 Z" fill="#f4a9b8"/>
-  <path d="M47 18 L44 10 L39 17 Z" fill="#f4a9b8"/>
-  <!-- голова -->
-  <ellipse cx="32" cy="36" rx="21" ry="19" fill="#9a9aa2"/>
-  <ellipse cx="32" cy="40" rx="16" ry="13" fill="#e8e8ec"/>
-  <!-- полоски табби -->
-  <path d="M32 18 v8 M24 20 l2 7 M40 20 l-2 7" stroke="#6f6f78" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-  <!-- глаза (смышлёные, зелёные; правый чуть прищурен — мемный вид) -->
-  <ellipse cx="24" cy="34" rx="5.2" ry="6" fill="#fff"/>
-  <ellipse cx="40" cy="34" rx="5.2" ry="6" fill="#fff"/>
-  <circle cx="24.5" cy="35" r="3" fill="#2fbf5f"/>
-  <circle cx="39.5" cy="35" r="3" fill="#2fbf5f"/>
-  <circle cx="25.4" cy="34" r="1" fill="#fff"/>
-  <circle cx="40.4" cy="34" r="1" fill="#fff"/>
-  <!-- нос + рот (лёгкая ухмылка) -->
-  <path d="M30 42 L34 42 L32 45 Z" fill="#e26d8a"/>
-  <path d="M32 45 q-4 4 -8 1 M32 45 q4 4 8 1" stroke="#5a5a63" stroke-width="2" fill="none" stroke-linecap="round"/>
-  <!-- усы -->
-  <path d="M20 40 L8 38 M20 43 L9 45 M44 40 L56 38 M44 43 L55 45" stroke="#c9c9cf" stroke-width="1.6" stroke-linecap="round"/>
+
+  <!-- уши (основание уходит под голову — голова накроет и сошьёт) -->
+  <path d="M12 30 L18 5 L31 26 Z" fill="#8a8a92"/>
+  <path d="M52 30 L46 5 L33 26 Z" fill="#8a8a92"/>
+  <path d="M17 26 L19 11 L26 24 Z" fill="#f4a9b8"/>
+  <path d="M47 26 L45 11 L38 24 Z" fill="#f4a9b8"/>
+
+  <!-- голова (поверх оснований ушей) -->
+  <ellipse cx="32" cy="38" rx="21" ry="19" fill="#9a9aa2"/>
+  <!-- морда (светлее) -->
+  <ellipse cx="32" cy="42" rx="16" ry="13" fill="#e8e8ec"/>
+
+  <!-- полоски табби на лбу -->
+  <path d="M32 21 v7 M24 23 l2 6 M40 23 l-2 6" stroke="#6f6f78" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+
+  <!-- глаза (зелёные, смышлёные) -->
+  <ellipse cx="24" cy="36" rx="5.4" ry="6.2" fill="#fff"/>
+  <ellipse cx="40" cy="36" rx="5.4" ry="6.2" fill="#fff"/>
+  <circle cx="24.5" cy="37" r="3.1" fill="#2fbf5f"/>
+  <circle cx="39.5" cy="37" r="3.1" fill="#2fbf5f"/>
+  <circle cx="25.5" cy="36" r="1.1" fill="#fff"/>
+  <circle cx="40.5" cy="36" r="1.1" fill="#fff"/>
+
+  <!-- нос + ухмылка -->
+  <path d="M29.5 44 L34.5 44 L32 47.5 Z" fill="#e26d8a"/>
+  <path d="M32 47.5 q-4.5 4 -9 1 M32 47.5 q4.5 4 9 1" stroke="#3a3a40" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+
+  <!-- усы / вибрисы — тёмные и толстые (видны и в мелком favicon) -->
+  <g stroke="#1c1c1e" stroke-width="2.2" stroke-linecap="round">
+    <path d="M21 43 L6 40"/>
+    <path d="M21 46 L7 48"/>
+    <path d="M43 43 L58 40"/>
+    <path d="M43 46 L57 48"/>
+  </g>
 </svg>
