@@ -12,12 +12,20 @@
       "dest": "llamacpp",
       "check": { "file": "llamacpp/llama-server.exe" }
     },
+    "model-qwythos-9b": {
+      "kind": "url",
+      "url": "https://huggingface.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF/resolve/main/Qwythos-9B-Claude-Mythos-5-1M-Q5_K_M.gguf",
+      "dest": "LLMs/LLAMACPP_MODELS/Qwythos-9B-Claude-Mythos-5-1M-Q5_K_M.gguf",
+      "check": { "file": "LLMs/LLAMACPP_MODELS/Qwythos-9B-Claude-Mythos-5-1M-Q5_K_M.gguf", "sizeBytes": 6467969952 },
+      "$comment": "ОСНОВНАЯ модель KLAS (идея 07): 256K контекста на 16 ГБ, agent-bench 6/6"
+    },
     "model-gemma-4-12b": {
       "kind": "url",
       "url": "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/gemma-4-12b-it-UD-Q4_K_XL.gguf",
       "sha256": "EE33AB5BE8E07ACA1C269FC645EAED5F3298E089D52DB29415839D8F29957020",
       "dest": "LLMs/LLAMACPP_MODELS/gemma-4-12b-it-UD-Q4_K_XL.gguf",
-      "check": { "file": "LLMs/LLAMACPP_MODELS/gemma-4-12b-it-UD-Q4_K_XL.gguf", "sizeBytes": 7366421920 }
+      "check": { "file": "LLMs/LLAMACPP_MODELS/gemma-4-12b-it-UD-Q4_K_XL.gguf", "sizeBytes": 7366421920 },
+      "$comment": "запасная + мультимодальная (зрение, задел под Jarvis)"
     },
     "llama-swap": {
       "kind": "winget",

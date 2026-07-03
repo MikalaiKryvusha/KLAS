@@ -129,6 +129,28 @@ for (const [name, item] of Object.entries(manifest.items)) {
   catch (e) { console.error(`  ✖ ${e.message}`); summary.failed.push(name); }
 }
 
+// ── 2.5 KAIF — опциональный dev-фреймворк (3rd-party) ────────────────────────
+// KLAS ≠ KAIF: KAIF в репозиторий не входит, но разворачивается ЛОКАЛЬНО в помощь разработке.
+// Флаг --with-kaif тянет KAIF.md из его origin и запускает его штатный распаковщик (--agent zoo-code).
+// Распаковщик KAIF не трогает уже существующие непустые файлы → кастомизации KLAS не затираются.
+if (process.argv.includes('--with-kaif')) {
+  const KAIF_MD = 'https://raw.githubusercontent.com/MikalaiKryvusha/KAIF/main/KAIF.md';
+  console.log('\n— KAIF (3rd-party dev-фреймворк) —');
+  act(`fetch ${KAIF_MD} → KAIF.md, extract kaif-unpack.mjs, run --agent zoo-code`);
+  if (APPLY) {
+    try {
+      const md = await (await fetch(KAIF_MD)).text();
+      writeFileSync(join(ROOT, 'KAIF.md'), md);
+      // Достаём встроенный распаковщик (FILE-блок kaif-unpack.mjs) — по правилам разворачивания KAIF
+      const m = md.match(/FILE: `kaif-unpack\.mjs`[^\n]*\n+``````js\n([\s\S]*?)\n``````/);
+      if (!m) throw new Error('не найден блок kaif-unpack.mjs в KAIF.md');
+      writeFileSync(join(ROOT, 'kaif-unpack.mjs'), m[1]);
+      execFileSync('node', [join(ROOT, 'kaif-unpack.mjs'), join(ROOT, 'KAIF.md'), '--agent', 'zoo-code'], { cwd: ROOT, stdio: 'inherit' });
+      summary.done.push('kaif');
+    } catch (e) { console.error(`  ✖ ${e.message}`); summary.failed.push('kaif'); }
+  } else summary.skipped.push('kaif');
+}
+
 // ── 3. Итог ────────────────────────────────────────────────────────────────
 console.log(`\n═══ Итог ═══`);
 console.log(`на месте: [${summary.ok}] · установлено: [${summary.done}] · к установке/пропущено: [${summary.skipped}] · провалено: [${summary.failed}]`);

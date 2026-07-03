@@ -39,6 +39,8 @@ BUG_FIXING_FRAMEWORK.md
 AGENTS.md
 CLAUDE.md
 /tools/kaif.mjs
+KAIF.md
+kaif-unpack.mjs
 
 # Мусор ОС/редакторов
 Thumbs.db
