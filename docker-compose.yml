@@ -57,6 +57,11 @@ services:
     volumes:
       - "F:/KLAS/homepage/config:/app/config"
       - "/var/run/docker.sock:/var/run/docker.sock"
+      # favicon пульта — векторный Кот Криник (подмена дефолтных иконок homepage)
+      - "F:/KLAS/logo/favicon-32x32.png:/app/public/favicon-32x32.png"
+      - "F:/KLAS/logo/favicon-16x16.png:/app/public/favicon-16x16.png"
+      - "F:/KLAS/logo/apple-touch-icon.png:/app/public/apple-touch-icon.png"
+      - "F:/KLAS/logo/homepage.ico:/app/public/homepage.ico"
     environment:
       - HOMEPAGE_VAR_BASE_URL=/homepage
       - HOMEPAGE_ALLOWED_HOSTS=localhost:3005,127.0.0.1:3005,krinikspc.forest-ratio.ts.net
