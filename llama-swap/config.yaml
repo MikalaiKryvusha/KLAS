@@ -20,13 +20,15 @@ macros:
     --reasoning off --cache-ram 0
 
 models:
-  # Кандидат Фазы 2b (researches/02): MoE 35B-A3B, целиком в VRAM. llama-swap сам свопит
-  # модели: запрос с model=qwen3.5-35b выгрузит gemma и загрузит qwen (и наоборот).
+  # ОСНОВНАЯ модель KLAS (интервью 002 Q1 = A, 2026-07-03): MoE 35B-A3B, целиком в VRAM.
+  # -c 98304 + KV q8_0: владелец просил больше контекста; q8_0-квант KV безопасен для агентики
+  # (researches/02), даёт ~2x к вместимости контекста. llama-swap свопит модели по полю model.
   "qwen3.5-35b":
     cmd: >
       F:\KLAS\llamacpp\llama-server.exe
       -m F:\KLAS\LLMs\LLAMACPP_MODELS\Qwen3.5-35B-A3B-UD-IQ3_S.gguf
-      --port ${PORT} -c 49152 -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+      --port ${PORT} -c 98304 -ctk q8_0 -ctv q8_0
+      -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
       -np 1 --slots --cont-batching
       --chat-template-kwargs "{\"enable_thinking\": false}"
     ttl: 300
