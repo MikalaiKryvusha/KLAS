@@ -14,7 +14,7 @@
     - Википедия оффлайн (Kiwix):
         href: "http://127.0.0.1:8081/wiki/"
         description: Локальная википедия и другие .zim (ru-wiki, wikibooks, wikisource…)
-        siteMonitor: "http://kiwix_wikipedia:8080/"
+        siteMonitor: "http://kiwix_wikipedia:8080/wiki/"
         icon: mdi-book-open-variant
 
 - 🌐 Доступ и сервисы:
@@ -23,6 +23,5 @@
         href: "https://krinikspc.forest-ratio.ts.net/llm/v1"
         icon: mdi-api
     - Reverse-proxy (Caddy):
-        description: Единый вход :443 (/llm · /wiki · /homepage)
-        siteMonitor: "http://caddy:443/homepage"
+        description: "Единый вход :443 (/llm · /wiki · /homepage), всё под basicauth"
         icon: mdi-shield-lock-outline
