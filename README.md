@@ -11,7 +11,7 @@
 </p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-FF1A8C.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.1-FF1A8C.svg)](https://github.com/MikalaiKryvusha/KLAS/releases)
+[![Version](https://img.shields.io/badge/Version-0.2-FF1A8C.svg)](https://github.com/MikalaiKryvusha/KLAS/releases)
 [![Framework](https://img.shields.io/badge/Framework-KAIF-7F52FF.svg)](https://github.com/MikalaiKryvusha/KAIF)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011-0078D6.svg)](#dom-sistemy)
 [![GPU](https://img.shields.io/badge/GPU-RTX%205070%20Ti%2016%20GB-76B900.svg)](#what-is-inside)
@@ -46,9 +46,10 @@ Deploy on a fresh PC in **two commands** — clone, then one deploy that pulls t
 | Inference engine | [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`, CUDA) | LLM on the GPU |
 | Model manager | [llama-swap](https://github.com/mostlygeek/llama-swap) — "sleeps until called" | auto load/unload by request, web UI at `/ui/` |
 | Main model | **Qwythos-9B** (Q5_K_M) — **256K context** | the "brain" (agent-bench 6/6, needle @148K ✅) |
-| Alt models | Qwen3.5-35B-A3B (smart MoE, 98K), Qwen3.6-27B (64K), gemma-4-12b (131K, multimodal) | swapped by name |
+| Alt models | Qwen3.5-35B-A3B (smart MoE, 98K), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), gemma-4-12b (131K, multimodal) | swapped by name |
 | Agent frontend | Zoo Code (VS Code) — local & remote | the agent in the editor |
-| Knowledge base | kiwix (local Wikipedia, docker) | offline knowledge for people and agents |
+| Knowledge base | kiwix (local Wikipedia) + **openzim-mcp** search for the agent | offline knowledge for people & agents |
+| Control panel | homepage (docker) + llama-swap UI | single entry point (Phase 5) |
 | Dashboard | homepage (docker) + llama-swap UI | the "control panel" |
 | Remote access | Caddy + Tailscale Funnel | OpenAI-compatible API over the internet |
 
@@ -89,6 +90,7 @@ An OpenAI-compatible endpoint over the internet — just a URL and an API key:
 | 5 | Control-panel dashboard + knowledge base | 🔧 |
 | 6 | Daily driver, access for close ones | 🔲 |
 | ✨ | Remote API access · anonymous deploy · Qwythos 256K | ✅ (0.1) |
+| ✨ | Control panel · knowledge search for the agent (MCP) · Ornith-35B | ✅ (0.2) |
 
 ### Managed by KAIF
 
@@ -127,10 +129,10 @@ RTX 5070 Ti 16 GB. Система «спит», пока не позвали, р
 | Движок инференса | [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`, CUDA) | LLM на GPU |
 | Менеджер моделей | [llama-swap](https://github.com/mostlygeek/llama-swap) — «спит, пока не позовут» | автозагрузка/выгрузка по запросу, веб-UI на `/ui/` |
 | Основная модель | **Qwythos-9B** (Q5_K_M) — **256K контекста** | «мозг» (agent-bench 6/6, needle @148K ✅) |
-| Запасные модели | Qwen3.5-35B-A3B (умный MoE, 98K), Qwen3.6-27B (64K), gemma-4-12b (131K, мультимодальная) | свопятся по имени |
+| Запасные модели | Qwen3.5-35B-A3B (умный MoE, 98K), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), gemma-4-12b (131K, мультимодальная) | свопятся по имени |
 | Агентский фронтенд | Zoo Code (VS Code) — локально и удалённо | агент в редакторе |
-| База знаний | kiwix (локальная википедия, docker) | оффлайн-знания людям и агентам |
-| Дашборд | homepage (docker) + UI llama-swap | «пульт управления» |
+| База знаний | kiwix (локальная википедия) + поиск **openzim-mcp** для агента | оффлайн-знания людям и агентам |
+| Дашборд | homepage (docker) + UI llama-swap | «пульт управления» (Фаза 5) |
 | Удалённый доступ | Caddy + Tailscale Funnel | OpenAI-совместимый API через интернет |
 
 ### Развернуть на новом ПК
@@ -170,6 +172,7 @@ OpenAI-совместимая точка входа через интернет 
 | 5 | Веб-дашборд «пульт» + база знаний | 🔧 |
 | 6 | Ежедневная работа, доступ близким | 🔲 |
 | ✨ | Удалённый API-доступ · анонимный деплой · Qwythos 256K | ✅ (0.1) |
+| ✨ | Пульт управления · поиск по базе знаний для агента (MCP) · Ornith-35B | ✅ (0.2) |
 
 ### Управляется через KAIF
 
