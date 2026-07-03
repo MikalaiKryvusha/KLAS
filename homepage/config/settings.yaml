@@ -2,6 +2,10 @@
 # For configuration options and examples, please see:
 # https://gethomepage.dev/configs/settings/
 
+# Пульт управления KLAS (Фаза 5, идея 08)
+title: KLAS — Пульт управления
+headerStyle: clean
+
 providers:
   openweathermap: openweathermapapikey
   weatherapi: weatherapiapikey

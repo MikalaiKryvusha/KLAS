@@ -1,9 +1,28 @@
 ---
-# For configuration options and examples, please see:
-# https://gethomepage.dev/configs/services/
+# Пульт управления KLAS (Фаза 5, идея 08). Docs: https://gethomepage.dev/configs/services/
+# siteMonitor пингуется ИЗ docker-контейнера homepage → хост-сервисы через host.docker.internal,
+# docker-сервисы — по именам контейнеров. href открывается в браузере владельца (локальные URL).
 
-- Сервисы Локального ИИ и Базы Знаний:
-    - Локальный ИИ AnythingLLM:
-        href: "https://krinikspc.forest-ratio.ts.net/"
-    - База Знаний Kiwix:
-        href: "https://krinikspc.forest-ratio.ts.net/wiki"
+- 🧠 Локальный ИИ (LLM):
+    - Пульт моделей (llama-swap):
+        href: "http://127.0.0.1:8080/ui/"
+        description: Модели · загрузка/выгрузка · метрики · логи
+        siteMonitor: "http://host.docker.internal:8080/health"
+        icon: mdi-robot-happy
+
+- 📚 База знаний:
+    - Википедия оффлайн (Kiwix):
+        href: "http://127.0.0.1:8081/wiki/"
+        description: Локальная википедия и другие .zim (ru-wiki, wikibooks, wikisource…)
+        siteMonitor: "http://kiwix_wikipedia:8080/"
+        icon: mdi-book-open-variant
+
+- 🌐 Доступ и сервисы:
+    - Удалённый LLM-API:
+        description: "OpenAI-совместимый API через интернет (Base URL /llm/v1 + Bearer-ключ)"
+        href: "https://krinikspc.forest-ratio.ts.net/llm/v1"
+        icon: mdi-api
+    - Reverse-proxy (Caddy):
+        description: Единый вход :443 (/llm · /wiki · /homepage)
+        siteMonitor: "http://caddy:443/homepage"
+        icon: mdi-shield-lock-outline
