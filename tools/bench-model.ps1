@@ -14,7 +14,11 @@ if (-not (Test-Path $Model)) { Write-Error "Модель не найдена: $M
 
 $f = Get-Item $Model
 Write-Host "=== KLAS bench: $($f.Name) ($([math]::Round($f.Length/1GB,2)) GB) — $(Get-Date -Format 'yyyy-MM-dd HH:mm') ===" -ForegroundColor Cyan
-Write-Host "VRAM до запуска: $(nvidia-smi --query-gpu=memory.used --format=csv,noheader)"
+$vramUsed = [int]((nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits) | Select-Object -First 1)
+Write-Host "VRAM до запуска: $vramUsed MiB"
+if ($vramUsed -gt 3000) {
+    Write-Warning "VRAM занята (> 3 GB) — вероятно, в llama-swap загружена модель. Замер будет НЕВАЛИДНЫМ (веса уедут в RAM). Выгрузи: Stop-Process -Name llama-server"
+}
 
 # llama-bench: pp512 (скорость чтения промпта) + tg128 (скорость генерации), все слои на GPU, FA on
 & "F:\KLAS\llamacpp\llama-bench.exe" -m $Model -ngl 99 -fa 1 -r $Repetitions
