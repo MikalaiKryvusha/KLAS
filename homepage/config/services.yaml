@@ -1,25 +1,28 @@
 ---
 # Пульт управления KLAS (Фаза 5, идея 08). Docs: https://gethomepage.dev/configs/services/
-# siteMonitor пингуется ИЗ docker-контейнера homepage → хост-сервисы через host.docker.internal,
-# docker-сервисы — по именам контейнеров. href открывается в браузере владельца (локальные URL).
+# siteMonitor пингуется ИЗ docker-контейнера homepage (docker-сервисы — по именам контейнеров, хост —
+# через host.docker.internal) — работает независимо от того, откуда открыт пульт.
+# href — ОТНОСИТЕЛЬНЫЕ (/wiki/, /ui/): пульт открывается через Caddy (локально http://localhost/,
+# удалённо через funnel), поэтому одни и те же ссылки работают в обоих случаях (homepage-over-funnel).
+# Open WebUI — исключение (root-приложение, отдельный порт funnel :8443) — абсолютная ссылка.
 
 - 💬 Чат для родных:
     - KLAS Chat (Open WebUI):
-        href: "http://127.0.0.1:3080/"
+        href: "https://krinikspc.forest-ratio.ts.net:8443/"
         description: Простой ChatGPT-подобный чат · личные аккаунты · приватные чаты
         siteMonitor: "http://open-webui:8080/health"
         icon: mdi-chat-processing
 
 - 🧠 Локальный ИИ (LLM):
     - Пульт моделей (llama-swap):
-        href: "http://127.0.0.1:8080/ui/"
+        href: "/ui/"
         description: Модели · загрузка/выгрузка · метрики · логи
         siteMonitor: "http://host.docker.internal:8080/health"
         icon: mdi-robot-happy
 
 - 📚 База знаний:
     - Википедия оффлайн (Kiwix):
-        href: "http://127.0.0.1:8081/wiki/"
+        href: "/wiki/"
         description: Локальная википедия и другие .zim (ru-wiki, wikibooks, wikisource…)
         siteMonitor: "http://kiwix_wikipedia:8080/wiki/"
         icon: mdi-book-open-variant
@@ -30,5 +33,5 @@
         href: "https://krinikspc.forest-ratio.ts.net/llm/v1"
         icon: mdi-api
     - Reverse-proxy (Caddy):
-        description: "Единый вход :443 (/llm · /wiki · /homepage), всё под basicauth"
+        description: "Единый вход: локально http://localhost/ (без пароля), через funnel :443 (basicauth) — /wiki · /ui · пульт"
         icon: mdi-shield-lock-outline

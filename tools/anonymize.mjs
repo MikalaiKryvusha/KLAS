@@ -137,6 +137,15 @@ if (existsSync(bmarks)) {
     if (APPLY) { lines.splice(s, end - s); writeFileSync(bmarks, lines.join('\n')); }
   }
 }
+// homepage/config/services.yaml: обезличить (funnel-хост в ссылках Open WebUI / LLM-API и т.п.).
+// homepage/ в SKIP_DIRS — скрабим этот файл явно теми же REPLACEMENTS (хост → <ваша-машина>.ts.net).
+const svcs = join(ROOT, 'homepage', 'config', 'services.yaml');
+if (existsSync(svcs)) {
+  const before = readFileSync(svcs, 'utf8');
+  let after = before;
+  for (const [rx, to] of REPLACEMENTS) after = after.replace(rx, to);
+  if (after !== before) { act('homepage/config/services.yaml: обезличить (funnel-хост)'); if (APPLY) writeFileSync(svcs, after); }
+}
 
 // ── 3. Git: разорвать origin (и по флагу — стереть историю) ──────────────────
 try {

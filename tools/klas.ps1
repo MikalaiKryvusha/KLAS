@@ -15,10 +15,10 @@ $ErrorActionPreference = 'Continue'
 
 # --- Константы KLAS (единый источник правды для контроллера) ---
 $Compose    = 'F:\KLAS\docker-compose.yml'          # docker-стек: kiwix, open-webui, homepage, caddy
-$Panel      = 'http://localhost:3005/'              # локальный пульт (homepage) — «control panel»
+$Panel      = 'http://localhost/'                   # пульт через Caddy :80 (единый вход, ссылки работают)
 $IconPath   = 'F:\KLAS\logo\homepage.ico'           # иконка «Кот Криник» для трея и уведомлений
 $LlamaVbs   = 'F:\KLAS\llama-swap\start-hidden.vbs' # тихий запуск LLM-менеджера llama-swap (баг 02)
-$FunnelPort = '443'                                 # публичный HTTPS-доступ через Tailscale Funnel
+$WebuiLocal = 'http://127.0.0.1:3080'               # Open WebUI (локально) — цель отдельного funnel-порта
 
 # Поднять весь стек KLAS. Идемпотентно (docker up -d и funnel --bg безопасно вызывать повторно).
 function Start-KlasStack {
@@ -28,14 +28,17 @@ function Start-KlasStack {
     if (-not (Get-Process llama-swap -ErrorAction SilentlyContinue)) {
         Start-Process wscript.exe -ArgumentList '//B','//Nologo',"`"$LlamaVbs`""
     }
-    # 3) публичный доступ через интернет (Tailscale Funnel → Caddy :443)
-    try { & tailscale funnel --bg $FunnelPort 2>&1 | Out-Null } catch {}
+    # 3) публичный доступ через Tailscale Funnel (funnel допускает порты 443/8443/10000):
+    #    :443  → Caddy (пульт / wiki / llama-swap UI / LLM-API);
+    #    :8443 → Open WebUI напрямую (root-приложение, под подпутём не живёт; своя авторизация).
+    try { & tailscale funnel --bg 443 2>&1 | Out-Null } catch {}
+    try { & tailscale funnel --bg --https=8443 $WebuiLocal 2>&1 | Out-Null } catch {}
 }
 
 # Остановить весь стек KLAS: закрыть внешний доступ, погасить контейнеры и LLM.
 function Stop-KlasStack {
-    # 1) сначала закрываем внешний доступ (funnel), чтобы наружу не торчал мёртвый Caddy
-    try { & tailscale funnel off 2>&1 | Out-Null } catch {}
+    # 1) закрываем ВЕСЬ внешний доступ (оба порта funnel), чтобы наружу не торчали мёртвые сервисы
+    try { & tailscale funnel reset 2>&1 | Out-Null } catch {}
     # 2) docker-контейнеры (stop, а не down — быстрый повторный подъём; restart-policy не поднимет)
     try { & docker compose -f $Compose stop 2>&1 | Out-Null } catch {}
     # 3) LLM-менеджер и его дочерние llama-server

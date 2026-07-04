@@ -75,8 +75,10 @@ services:
     container_name: caddy
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      # Только localhost: :80 — локальный вход пульта без пароля; :443 — цель Tailscale Funnel
+      # (tailscaled проксирует на 127.0.0.1:443). Наружу в LAN Caddy не публикуется.
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
     volumes:
       - "F:/KLAS/caddy/Caddyfile:/etc/caddy/Caddyfile"
       - "F:/KLAS/caddy/data:/data"
