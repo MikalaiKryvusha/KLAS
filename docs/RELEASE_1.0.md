@@ -4,11 +4,11 @@
 
 # KLAS 1.0 — Universal KLAS
 
-**[English](#english) · [Русский](#русский)**
+**[English](https://github.com/MikalaiKryvusha/KLAS#english) · [Русский](https://github.com/MikalaiKryvusha/KLAS#русский)**
 
 ## English
 
-**English** • [Русский](#русский)
+**English** • [Русский](https://github.com/MikalaiKryvusha/KLAS#русский)
 
 A self-hosted AI ecosystem that lives entirely on your own PC — a local LLM on your gaming GPU,
 autonomous agents in your editor, a web control panel, an offline Wikipedia, and a private chat for
@@ -67,7 +67,7 @@ Managed by the human-visionary + AI-agent tandem on the
 
 ## Русский
 
-**Русский** • [English](#english)
+**Русский** • [English](https://github.com/MikalaiKryvusha/KLAS#english)
 
 Self-hosted экосистема агентского ИИ, целиком живущая на вашем ПК — локальная LLM на геймерской
 видеокарте, автономные агенты в редакторе, веб-пульт, оффлайн-Википедия и приватный чат для родных.
