@@ -13,6 +13,8 @@
 3. Пульт моделей `http://localhost:3005/ui/` — **404**.
 4. Kiwix `http://localhost:3005/wiki/` — **404**.
 
+5. `http://localhost/ui/#/logs` — красный статус, логи пустые, «ничего не видит».
+
 **Через Tailscale Funnel с телефона** — наконец заработало, НО: LLM внутри Open WebUI утверждает, что
 не видит базу Kiwix (`list_knowledge_bases` / `search_knowledge_files` возвращают пусто).
 
@@ -42,6 +44,20 @@
   существующие у homepage настройки** (no-op); они создавали ложное ощущение, что валидация решена.
   Единственный реальный рычаг — переменная `HOMEPAGE_ALLOWED_HOSTS`.
 
+### Причина C (баг 5): llama-swap UI дёргает свой API на КОРНЕ, а Caddy отдаёт корень homepage
+
+- UI llama-swap живёт под `/ui/` (статика), но живые данные тянет с **корня**: `EventSource
+  /api/events` (статус), `/logs` (логи), плюс `/running`, `/upstream/*`, `/unload`,
+  `/api/performance|version|models`. У llama-swap НЕТ опции базового префикса (`--help`: только
+  `-listen`/`-config`), эти пути жёстко зашиты.
+- Caddy `(klas_web)` проксировал на llama-swap только `/ui*`; все корневые API-пути падали в catch-all
+  `handle {}` → **homepage** → 404. Поэтому `/ui/` открывался (200), но SSE `/api/events` = 404 →
+  красный статус, а `/logs` = 404 → пустые логи. **Это баг 5.**
+- Подпути llama-swap (`/api/events|performance|version|models`, `/logs`, `/running`, `/upstream`,
+  `/unload`) **не пересекаются** с `/api/*` самого homepage (`/api/config|services|widgets|…`) —
+  проверено: на homepage они дают 404, а его собственные — работают. Значит их можно точечно
+  направить на llama-swap, не задев пульт.
+
 ### Причина B (баг 2): статичная ссылка не может быть и локальной, и удалённой
 
 - Open WebUI — root-приложение, не живёт под подпутём (поэтому отдаётся отдельным портом funnel `:8443`,
@@ -65,12 +81,16 @@
    `127.0.0.1` (для входа через Caddy `:80`): →
    `localhost,127.0.0.1,localhost:3005,127.0.0.1:3005,krinikspc.forest-ratio.ts.net`. Причина
    расписана комментарием прямо в файле.
-2. **`caddy/Caddyfile`** (versioned) — ссылка на чат сделана относительной `/chat`, а каждый вход
-   редиректит её на свой адрес:
+2. **`caddy/Caddyfile`** (вне git — секреты) — ссылка на чат сделана относительной `/chat`, а каждый
+   вход редиректит её на свой адрес:
    - `:80` (локально): `redir /chat http://localhost:3080/ 302`;
    - `:443` (funnel, до basicauth): `redir /chat https://krinikspc.forest-ratio.ts.net:8443/ 302`.
 
    Так локально ходим локально, с телефона — через funnel, ссылка на пульте одна.
+5. **`caddy/Caddyfile`** — в общий сниппет `(klas_web)` добавлен именованный матчер `@swap_api` и
+   `handle`, проксирующий корневые API-пути llama-swap на `host.docker.internal:8080`
+   (`/api/events`, `/api/performance`, `/api/version`, `/api/models*`, `/logs*`, `/upstream/*`,
+   `/unload`, `/running`) — до catch-all homepage. Чинит баг 5 сразу и локально, и через funnel.
 3. **`homepage/config/services.yaml`** (в .gitignore) — `href` чата: `/chat` вместо funnel-URL.
 4. **`homepage/config/settings.yaml`** (в .gitignore) — удалены фейковые `disableHostValidation`/
    `allowIframe`/`host`; оставлен комментарий-указатель на `HOMEPAGE_ALLOWED_HOSTS`.
@@ -84,6 +104,10 @@
   логах homepage — **0**.
 - Через `:443` (plain HTTP, как отдаёт tailscaled): `/chat`→302→`https://…:8443/`; `/`→401,
   `/llm/v1/models` без ключа→401 (basicauth и защита LLM-API целы).
+- llama-swap UI (баг 5): через Caddy `:80` `/api/events`→200 `text/event-stream` (SSE ожил),
+  `/logs`/`/running`/`/api/performance`/`/api/version`/`/unload`→200; homepage не задет
+  (`/`, `/ui/`, `/wiki/`, `/api/services`, `/api/widgets`→200); через funnel `/api/events`→401
+  (под basicauth — после логина статус в UI зелёный и удалённо).
 
 ## Осталось
 
