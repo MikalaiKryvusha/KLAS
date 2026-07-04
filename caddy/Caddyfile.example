@@ -1,12 +1,60 @@
+# ── ШАБЛОН Caddyfile для KLAS (скопируй в caddy/Caddyfile и подставь секреты) ─────────────────
+# Настоящий caddy/Caddyfile — ВНЕ git (в нём секреты). Этот пример держим в актуальном виде,
+# чтобы деплой «под ключ» на новой машине сразу получал рабочую конфигурацию.
+# Плейсхолдеры для замены:
+#   {ВСТАВЬ_API_КЛЮЧ}   — Bearer-ключ LLM-API: node -e "console.log('klas-'+require('crypto').randomBytes(30).toString('base64url'))"
+#   {ВСТАВЬ_BCRYPT_ХЕШ} — хеш пароля basicauth: docker exec caddy caddy hash-password --plaintext <пароль>
+#   {FUNNEL_ХОСТ}       — твой Tailscale-хост, напр. mypc.ts.net
+
 {
     auto_https off
 }
 
+# ── Общие веб-маршруты KLAS ───────────────────────────────────────────────────
+# Импортируются в ОБА входа: локальный :80 (без пароля) и публичный :443 (funnel, basicauth).
+# Приложения проксируются под путями, которые они поддерживают нативно → ссылки на пульте
+# относительные (/wiki/, /ui/) и работают одинаково локально и через funnel.
+(klas_web) {
+    # Kiwix — база знаний на /wiki/ (нужен хвостовой слеш). Внутри docker-сети порт 8080.
+    redir /wiki /wiki/
+    handle /wiki* {
+        reverse_proxy kiwix_wikipedia:8080
+    }
+    # llama-swap UI (модели · загрузка/выгрузка · логи · метрики · Playground) — НАТИВНО под /ui/,
+    # префикс НЕ срезаем. llama-swap слушает на ХОСТЕ (host.docker.internal:8080).
+    handle /ui* {
+        reverse_proxy host.docker.internal:8080
+    }
+    # ⚠️ UI llama-swap живёт под /ui/, но свой API дёргает на КОРНЕ. Проксируем эти корневые пути на
+    # llama-swap, иначе они проваливаются на homepage → её 404-страница (и SPA/боковой ящик пропадает):
+    #   • /v1/*        — OpenAI-API Playground (chat/completions, images, speech, transcription, rerank,
+    #                    load test) — БЕЗ него «общаться» в Playground = 404 (баг 04).
+    #   • /api/events|performance|version|models|captures + /logs /running /upstream/* /unload — live-API
+    #     UI (статус, метрики, логи, захваты); без них статус краснеет и логи пусты (баг 03).
+    # Коллизий с homepage нет: у неё /api/config|services|widgets|…, а /v1/* она не использует.
+    @swap_api path /v1/* /api/events /api/performance /api/version /api/models /api/models/* /api/captures /api/captures/* /logs /logs/* /upstream/* /unload /running
+    handle @swap_api {
+        reverse_proxy host.docker.internal:8080
+    }
+    # Пульт (Homepage) — корневое Next.js-приложение (ассеты от /), занимает КОРЕНЬ; всё прочее — сюда.
+    handle {
+        reverse_proxy homepage:3000
+    }
+}
+
+# ── Локальный вход (только с этой машины: docker публикует как 127.0.0.1:80) — БЕЗ пароля ──
+# Порт 80 НЕ пробрасывается наружу (funnel использует только 443/8443/10000) → безопасно без auth.
+:80 {
+    # KLAS Chat (Open WebUI) — root-приложение на своём порту. Ссылка на пульте относительная (/chat);
+    # локально редиректим на прямой порт docker 3080 (не гоняем локальный трафик через funnel).
+    redir /chat http://localhost:3080/ 302
+    import klas_web
+}
+
+# ── Публичный вход через Tailscale Funnel (:443) — basicauth ──────────────────
 :443 {
-    # === LLM API — удалённый доступ (OpenAI-совместимый, для Zoo Code/Cline через интернет) ===
-    # Base URL клиента: https://<твоя-машина>.ts.net/llm/v1 · API Key = <ключ ниже>.
-    # handle_path срезает /llm → llama-swap на хосте (host.docker.internal:8080) видит /v1/...
-    # Сгенерируй сильный ключ: node -e "console.log('klas-'+require('crypto').randomBytes(30).toString('base64url'))"
+    # === LLM API — УДАЛЁННЫЙ ДОСТУП ===
+    # Base URL = https://{FUNNEL_ХОСТ}/llm/v1 · API Key = Bearer-ключ ниже (OpenAI-клиенты, Zoo Code).
     handle_path /llm/* {
         route {
             @unauthorized not header Authorization "Bearer {ВСТАВЬ_API_КЛЮЧ}"
@@ -15,19 +63,19 @@
         }
     }
 
-    # === Остальной сайт (Kiwix-википедия, Homepage) — basicauth ===
-    # Хеш пароля: docker exec caddy caddy hash-password --plaintext <пароль>
+    # KLAS Chat (Open WebUI) через funnel — на отдельный публичный порт :8443 (своя авторизация).
+    redir /chat https://{FUNNEL_ХОСТ}:8443/ 302
+
+    # === Веб (пульт, Kiwix, llama-swap UI) — логин+пароль ===
     handle {
         basicauth {
             kryvusha {ВСТАВЬ_BCRYPT_ХЕШ}
         }
-        redir /wiki /wiki/
-        redir /homepage /homepage/
-        handle /wiki* {
-            reverse_proxy kiwix_wikipedia:8080
-        }
-        handle /homepage* {
-            reverse_proxy homepage:3000
-        }
+        import klas_web
     }
 }
+
+# ── Open WebUI (чат для родных) НЕ проксируется через Caddy ──
+# Это root-приложение (ассеты /static, /_app от корня). Отдаётся отдельным портом Tailscale Funnel
+# :8443 напрямую (https://{FUNNEL_ХОСТ}:8443/), СО СВОЕЙ авторизацией (WEBUI_AUTH).
+#   tailscale funnel --bg --https=8443 http://127.0.0.1:3080

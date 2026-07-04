@@ -11,6 +11,7 @@
     "health": "powershell -File tools/health-check.ps1"
   },
   "devDependencies": {
-    "marked": "^18.0.5"
+    "marked": "^18.0.5",
+    "playwright": "^1.61.1"
   }
 }
