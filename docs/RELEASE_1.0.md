@@ -4,7 +4,9 @@
 
 # KLAS 1.0 — Universal KLAS
 
-**English · [Русский](#русский)**
+**[English](#english) · [Русский](#русский)**
+
+## English
 
 A self-hosted AI ecosystem that lives entirely on your own PC — a local LLM on your gaming GPU,
 autonomous agents in your editor, a web control panel, an offline Wikipedia, and a private chat for
@@ -61,8 +63,7 @@ Managed by the human-visionary + AI-agent tandem on the
 
 ---
 
-<a name="русский"></a>
-# KLAS 1.0 — Universal KLAS · Русский
+## Русский
 
 Self-hosted экосистема агентского ИИ, целиком живущая на вашем ПК — локальная LLM на геймерской
 видеокарте, автономные агенты в редакторе, веб-пульт, оффлайн-Википедия и приватный чат для родных.

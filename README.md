@@ -18,8 +18,7 @@
 
 ---
 
-<a name="english"></a>
-## English · [Русский](#русский)
+## English
 
 **KLAS is a self-hosted AI ecosystem that lives entirely on your own PC.** A local large language
 model runs on your gaming GPU; autonomous agents work in your editor; a web dashboard is the single
@@ -116,8 +115,7 @@ vendored into this repository.
 
 ---
 
-<a name="русский"></a>
-## Русский · [English](#english)
+## Русский
 
 **KLAS — self-hosted экосистема агентского ИИ, целиком живущая на вашем личном ПК.** Локальная
 LLM работает на геймерской видеокарте; автономные агенты — в редакторе; веб-дашборд — единый пульт;
