@@ -59,8 +59,20 @@ Deploy on a fresh PC in **two commands** — clone, then one deploy that pulls t
 
 ### Deploy on a fresh PC
 
+**Easiest — the guided wizard** (multilingual, checks your hardware, foolproof, survives reboots):
+
 ```powershell
 git clone https://github.com/MikalaiKryvusha/KLAS.git F:\KLAS
+node F:\KLAS\tools\install.mjs           # interactive installer-wizard (RU/EN)
+```
+
+The wizard picks a language, detects your GPU/driver/Docker/disk, asks a few questions, downloads
+everything, sets up desktop shortcuts, and brings the stack up. You can stop and re-run anytime —
+it continues where it left off. `--yes` runs with recommended defaults, no questions.
+
+**Or the low-level engine** (same downloads, no wizard):
+
+```powershell
 node F:\KLAS\tools\deploy.mjs           # dry-run: prints the plan
 node F:\KLAS\tools\deploy.mjs --apply   # deploy (pulls models & docker images)
 ```
@@ -141,8 +153,21 @@ RTX 5070 Ti 16 GB. Система «спит», пока не позвали, р
 
 ### Развернуть на новом ПК
 
+**Проще всего — мастер-установщик** (мультиязычный, проверяет железо, защита от дурака, переживает
+перезагрузки):
+
 ```powershell
 git clone https://github.com/MikalaiKryvusha/KLAS.git F:\KLAS
+node F:\KLAS\tools\install.mjs           # интерактивный мастер (рус/eng)
+```
+
+Мастер выбирает язык, определяет вашу видеокарту/драйвер/Docker/диск, задаёт пару вопросов, всё
+скачивает, создаёт ярлыки на Рабочем столе и поднимает стек. Можно прервать и запустить снова —
+продолжит с места остановки. Флаг `--yes` ставит с рекомендуемыми настройками, без вопросов.
+
+**Или низкоуровневый движок** (те же скачивания, без мастера):
+
+```powershell
 node F:\KLAS\tools\deploy.mjs           # репетиция: печатает план
 node F:\KLAS\tools\deploy.mjs --apply   # развёртывание (докачивает модели и docker-образы)
 ```
