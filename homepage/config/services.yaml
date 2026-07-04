@@ -4,11 +4,13 @@
 # через host.docker.internal) — работает независимо от того, откуда открыт пульт.
 # href — ОТНОСИТЕЛЬНЫЕ (/wiki/, /ui/): пульт открывается через Caddy (локально http://localhost/,
 # удалённо через funnel), поэтому одни и те же ссылки работают в обоих случаях (homepage-over-funnel).
-# Open WebUI — исключение (root-приложение, отдельный порт funnel :8443) — абсолютная ссылка.
+# Open WebUI — root-приложение (не живёт под подпутём), но ссылка тоже ОТНОСИТЕЛЬНАЯ (/chat):
+# Caddy на каждом входе редиректит /chat на нужный адрес — локально на порт 3080, через funnel на
+# :8443 (баг 03). Так владелец локально ходит локально, а с телефона — через funnel.
 
 - 💬 Чат для родных:
     - KLAS Chat (Open WebUI):
-        href: "https://krinikspc.forest-ratio.ts.net:8443/"
+        href: "/chat"
         description: Простой ChatGPT-подобный чат · личные аккаунты · приватные чаты
         siteMonitor: "http://open-webui:8080/health"
         icon: mdi-chat-processing

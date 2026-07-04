@@ -10,12 +10,9 @@ providers:
   openweathermap: openweathermapapikey
   weatherapi: weatherapiapikey
 
-# Исправление ошибки Host validation failed
-disableHostValidation: true
-
-# Дополнительные настройки для работы в Docker на Windows
-allowIframe: true
-host: 0.0.0.0
+# Host-валидация ("Host validation failed") НЕ настраивается здесь: у homepage нет такой опции в
+# settings.yaml (disableHostValidation/allowIframe/host были no-op и путали). Единственный реальный
+# рычаг — переменная HOMEPAGE_ALLOWED_HOSTS в docker-compose.yml (см. баг 03).
 
 # base НЕ задаём: homepage — корневое приложение (ассеты идут от /), а за Caddy/funnel пульт
 # смонтирован на КОРНЕ (баг 02). Прежнее base=https://.../homepage было неэффективно и путало.
