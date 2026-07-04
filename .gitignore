@@ -48,8 +48,12 @@ kaif-unpack.mjs
 # Ярлык запуска KLAS (генерируется tools/install-klas-shortcut.ps1; машинно-зависимые абс. пути)
 /KLAS.lnk
 
-# Личная карта ссылок владельца (реальный funnel-хост + логин) — в git только шаблон LINKS.md
-/LINKS.local.md
+# Личная карта ссылок + ключей владельца (реальный funnel-хост, логин, пароль, Bearer-ключ) —
+# в git только шаблон LINKS.md. Документ ключей и его PDF-рендер НЕ версионируются.
+/LINKS.local.*
+# страховка: любые *.local.pdf и временные html рендерера — мимо git
+*.local.pdf
+*.tmp.html
 
 # Мусор ОС/редакторов
 Thumbs.db

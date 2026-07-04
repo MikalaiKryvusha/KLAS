@@ -9,5 +9,8 @@
     "deploy": "node tools/deploy.mjs",
     "deploy:apply": "node tools/deploy.mjs --apply",
     "health": "powershell -File tools/health-check.ps1"
+  },
+  "devDependencies": {
+    "marked": "^18.0.5"
   }
 }
