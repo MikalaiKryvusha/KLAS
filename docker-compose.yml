@@ -67,7 +67,12 @@ services:
       - "F:/KLAS/logo/android-chrome-512x512.png:/app/public/android-chrome-512x512.png"
     environment:
       # base НЕ задаём — пульт смонтирован на КОРНЕ за Caddy/funnel (баг 02); homepage корневой.
-      - HOMEPAGE_ALLOWED_HOSTS=localhost:3005,127.0.0.1:3005,krinikspc.forest-ratio.ts.net
+      # HOMEPAGE_ALLOWED_HOSTS — ЕДИНСТВЕННЫЙ реальный механизм host-валидации homepage (Next.js
+      # Server Actions): начальный GET страницы всегда 200, но POST-ы виджетов/пингов падают с
+      # "Host validation failed", если Host не в списке. Порт по умолчанию (80/443) в Host НЕ
+      # входит → нужны голые `localhost`/`127.0.0.1` для входа через Caddy :80 (баг 03); варианты
+      # с `:3005` — для прямого захода на homepage (dev); голое имя funnel — для входа через :443.
+      - HOMEPAGE_ALLOWED_HOSTS=localhost,127.0.0.1,localhost:3005,127.0.0.1:3005,krinikspc.forest-ratio.ts.net
     restart: unless-stopped
 
   caddy:
