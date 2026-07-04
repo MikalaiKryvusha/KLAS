@@ -42,6 +42,9 @@ CLAUDE.md
 KAIF.md
 kaif-unpack.mjs
 
+# Ярлык запуска KLAS (генерируется tools/install-klas-shortcut.ps1; машинно-зависимые абс. пути)
+/KLAS.lnk
+
 # Мусор ОС/редакторов
 Thumbs.db
 Desktop.ini

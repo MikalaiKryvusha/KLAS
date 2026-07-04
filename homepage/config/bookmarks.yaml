@@ -6,3 +6,10 @@
     - Википедия:
         - abbr: Wiki
           href: https://ru.wikipedia.org/
+
+# Ссылка на исходный код KLAS. При анонимной установке (tools/anonymize.mjs) этот блок удаляется.
+- Проект:
+    - Исходный код KLAS (GitHub):
+        - abbr: KLAS
+          href: https://github.com/MikalaiKryvusha/KLAS
+          icon: si-github

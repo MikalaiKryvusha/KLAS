@@ -122,6 +122,21 @@ if (existsSync(kaifjs)) {
   const after = before.replace(/'kaif-fork', 'kaif-switch-origin', /g, '').replace(/'kaif-update', /g, '');
   if (after !== before) { act('tools/kaif.mjs: убрать origin-скиллы из проверки'); if (APPLY) writeFileSync(kaifjs, after); }
 }
+// homepage/config/bookmarks.yaml: убрать ссылку на репозиторий автора — анонимной установке она не
+// нужна. homepage/ в SKIP_DIRS (текст не скрабится), поэтому вырезаем блок «- Проект:» отдельным шагом.
+const bmarks = join(ROOT, 'homepage', 'config', 'bookmarks.yaml');
+if (existsSync(bmarks)) {
+  const lines = readFileSync(bmarks, 'utf8').split(/\r?\n/);
+  const start = lines.findIndex((l) => /^-\s+Проект:/.test(l));
+  if (start !== -1) {
+    let end = start + 1;                       // блок = строка группы + все последующие пустые/отступные
+    while (end < lines.length && (lines[end].trim() === '' || /^\s/.test(lines[end]))) end++;
+    let s = start;                             // прихватить строку-комментарий про анонимизацию над блоком
+    if (s > 0 && /анонимн/i.test(lines[s - 1])) s--;
+    act('homepage/config/bookmarks.yaml: убрать ссылку на репозиторий (блок «Проект»)');
+    if (APPLY) { lines.splice(s, end - s); writeFileSync(bmarks, lines.join('\n')); }
+  }
+}
 
 // ── 3. Git: разорвать origin (и по флагу — стереть историю) ──────────────────
 try {
