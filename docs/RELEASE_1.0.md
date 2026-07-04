@@ -8,6 +8,8 @@
 
 ## English
 
+**English** • [Русский](#русский)
+
 A self-hosted AI ecosystem that lives entirely on your own PC — a local LLM on your gaming GPU,
 autonomous agents in your editor, a web control panel, an offline Wikipedia, and a private chat for
 your family. Nothing goes to the cloud. It sleeps until called, runs stably, and gets as close to the
@@ -64,6 +66,8 @@ Managed by the human-visionary + AI-agent tandem on the
 ---
 
 ## Русский
+
+**Русский** • [English](#english)
 
 Self-hosted экосистема агентского ИИ, целиком живущая на вашем ПК — локальная LLM на геймерской
 видеокарте, автономные агенты в редакторе, веб-пульт, оффлайн-Википедия и приватный чат для родных.
