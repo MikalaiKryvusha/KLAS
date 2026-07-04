@@ -10,6 +10,14 @@
 
 ## Что сделано
 
+### 🚀 Релиз 1.0 «Universal KLAS» ✅ (2026-07-04)
+- Опубликован https://github.com/MikalaiKryvusha/KLAS/releases/tag/v1.0 (Latest, тег `v1.0`,
+  package.json → 1.0.0). README переписан заново (герой `KLAS_latest.jpg`, без истории версий),
+  README.pdf перегенерён, release notes `docs/RELEASE_1.0.md`. План — `plans/06_release_1_0.md`.
+- В релизе: чат Open WebUI для родных + поиск Kiwix из чатов (идея 11), трей + ярлыки Run/Stop/Panel
+  (идеи 10/13), **умный мастер-установщик** с каталогом баз знаний (идея 12, `tools/install.mjs` +
+  `tools/lib/*`, план 05), безопасность (секреты ротированы, история вычищена).
+
 ### Фаза 0 — Фундамент ✅ (2026-07-02)
 - KAIF v1.1 развёрнут; `GOAL.md` → `MASTER_PLAN.md`; аудит окружения
   (`researches/01_local_nomad_audit.md`); git (только `main`); баг 01; интервью 001.
