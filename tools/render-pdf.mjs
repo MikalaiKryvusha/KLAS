@@ -59,7 +59,15 @@ function render(inputMd, outputPdf) {
   const inAbs = resolve(inputMd);
   if (!existsSync(inAbs)) throw new Error(`Нет файла: ${inputMd}`);
   const out = resolve(outputPdf || inAbs.replace(/\.md$/i, ".pdf"));
-  const md = readFileSync(inAbs, "utf-8");
+  let md = readFileSync(inAbs, "utf-8");
+  // Убираем цветные эмодзи ДЛЯ PDF (не трогая сам .md): headless Chrome кодирует их как Type3-шрифты
+  // с паттернами, на которых спотыкаются старые PDF.js-вьюверы (напр. расширение VS Code, PDF.js 2.10:
+  // "Requesting object that isn't resolved yet pattern_… / showType3Text"). Без эмодзи Type3 не возникает.
+  md = md
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "") // региональные индикаторы (флаги)
+    .replace(/[️‍]/g, "") // variation selector-16 и ZWJ
+    .replace(/[ \t]{2,}/g, " ");
   // <base> = папка исходника → относительные картинки (логотип и т.п.) резолвятся
   const baseHref = pathToFileURL(dirname(inAbs) + "/").href;
   const html = htmlShell(basename(inAbs), marked.parse(md), baseHref);
