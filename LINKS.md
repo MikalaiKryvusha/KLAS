@@ -1,44 +1,38 @@
 # KLAS — карта ссылок
 
-Единая карта доступа к сервисам KLAS: что где открывается локально и через интернет. Реальные
-значения владельца — в `LINKS.local.md` (вне git); секреты — в `caddy/PASSWORD.local.txt`.
+Что где открывается. Реальные значения владельца — в `LINKS.local.md` (вне git), секреты — в
+`caddy/PASSWORD.local.txt`. `<ХОСТ>` — публичный Tailscale-хост (`<машина>.ts.net`), `<ЛОГИН>` —
+логин basicauth.
 
-Обозначения: `<ХОСТ>` — ваш публичный Tailscale-хост (вида `<ваша-машина>.ts.net`); `<ЛОГИН>` —
-логин basicauth (задаётся при генерации хеша в `caddy/Caddyfile`).
-
-## 🖥 Локально (с этого ПК)
+## 🖥 Локально (с этого ПК) — вход `http://localhost/`
 
 | Что | Ссылка | Доступ |
 |-----|--------|--------|
-| **Пульт KLAS** (главный вход) | http://localhost/ | без пароля (Caddy :80, только эта машина) |
-| Пульт напрямую (homepage) | http://localhost:3005/ | без пароля |
-| Пульт моделей (llama-swap UI) | http://localhost:8080/ui/ | без пароля |
+| **Пульт KLAS** (главный вход) | http://localhost/ | без пароля (Caddy :80) |
+| Пульт моделей (llama-swap UI) | http://localhost/ui/ | без пароля |
+| Википедия (Kiwix) | http://localhost/wiki/ | без пароля |
 | Чат (Open WebUI) | http://localhost:3080/ | свой логин Open WebUI |
-| Википедия (Kiwix) | http://localhost:8081/wiki/ | без пароля |
 
-## 🌐 Удалённо (интернет, Tailscale Funnel)
+## 🌐 Удалённо (интернет, Tailscale Funnel) — вход `https://<ХОСТ>/`
 
 | Что | Ссылка | Доступ |
 |-----|--------|--------|
-| **Пульт KLAS** | https://&lt;ХОСТ&gt;/ | basicauth (`<ЛОГИН>` + пароль) |
-| Википедия (Kiwix) | https://&lt;ХОСТ&gt;/wiki/ | basicauth |
+| **Пульт KLAS** | https://&lt;ХОСТ&gt;/ | basicauth (`<ЛОГИН>`) |
 | Пульт моделей (llama-swap UI) | https://&lt;ХОСТ&gt;/ui/ | basicauth |
-| **LLM-API** (OpenAI-совм.) | https://&lt;ХОСТ&gt;/llm/v1 | Bearer-ключ (в `caddy/PASSWORD.local.txt`) |
+| Википедия (Kiwix) | https://&lt;ХОСТ&gt;/wiki/ | basicauth |
+| **LLM-API** (OpenAI-совм.) | https://&lt;ХОСТ&gt;/llm/v1 | Bearer-ключ |
 | **Чат** (Open WebUI) | https://&lt;ХОСТ&gt;:8443/ | свой логин Open WebUI |
+
+> Ссылку на чат на пульте (`/chat`) Caddy редиректит сам: локально → `:3080`, через funnel → `:8443`.
 
 ## 🎛 Управление
 
-- Ярлык **KLAS** (Рабочий стол / корень проекта) или иконка в трее: **Open KLAS control panel** /
-  **Stop KLAS and exit**. Ярлык ставит `tools/install-klas-shortcut.ps1`.
-- Вручную: `powershell -File tools\klas.ps1 -Action up` (поднять всё) / `-Action down` (погасить всё).
-- Автозапуск при входе в систему: `powershell -File tools\install-autostart.ps1` (один раз).
+- Ярлык **KLAS** (Рабочий стол / трей): **Open KLAS control panel** / **Stop KLAS and exit**.
+- Вручную: `tools\klas.ps1 -Action up` / `-Action down`. Автозапуск: `tools\install-autostart.ps1`.
 
 ## 🧭 Как устроен доступ
 
-- **Единый вход через Caddy.** Локально — `:80` (без пароля, слушает только 127.0.0.1). Публично —
-  `:443` через Tailscale Funnel под basicauth. Ссылки-виджеты пульта относительные (`/wiki/`, `/ui/`) —
-  поэтому одинаково работают локально и удалённо.
-- **Open WebUI** — root-приложение (не живёт под подпутём), поэтому отдаётся отдельным портом
-  Funnel `:8443` напрямую, со своей авторизацией.
-- **Лимит Tailscale Funnel — порты 443 / 8443 / 10000.** Это не ограничивает число сервисов: на 443
-  Caddy разводит сколько угодно приложений по путям (`/wiki`, `/ui`, `/llm`, …).
+- **Единый вход — Caddy.** Локально `:80` (без пароля, только 127.0.0.1), публично `:443` (funnel,
+  basicauth). Ссылки пульта относительные (`/wiki/`, `/ui/`) → работают и локально, и удалённо.
+- **Open WebUI** — root-приложение, поэтому отдаётся отдельным портом funnel `:8443` (своя авторизация).
+- **Funnel даёт только порты 443 / 8443 / 10000**, но на 443 Caddy разводит любое число сервисов по путям.
