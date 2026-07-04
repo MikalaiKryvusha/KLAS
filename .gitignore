@@ -15,6 +15,9 @@ logs/
 /homepage/config/*
 !/homepage/config/*.yaml
 /AnythingLLM/
+# Open WebUI: runtime-данные (data/) вне git; версионируем только свои тулы (open-webui/tools/)
+/open-webui/*
+!/open-webui/tools/
 # Caddyfile содержит хеш пароля — в git только шаблон Caddyfile.example (инцидент 2026-07-03)
 /caddy/*
 !/caddy/Caddyfile.example
