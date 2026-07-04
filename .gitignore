@@ -45,6 +45,9 @@ kaif-unpack.mjs
 # Ярлык запуска KLAS (генерируется tools/install-klas-shortcut.ps1; машинно-зависимые абс. пути)
 /KLAS.lnk
 
+# Личная карта ссылок владельца (реальный funnel-хост + логин) — в git только шаблон LINKS.md
+/LINKS.local.md
+
 # Мусор ОС/редакторов
 Thumbs.db
 Desktop.ini
