@@ -17,10 +17,12 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { makeT, LANGS } from './lib/i18n.mjs';
-import { select, confirm, QuitSignal } from './lib/prompt.mjs';
+import { select, confirm, multiselect, text, closePrompts, QuitSignal } from './lib/prompt.mjs';
 import { detectEnvironment } from './lib/detect.mjs';
 import { loadState, saveState, markDone, clearState, nextPhase } from './lib/state.mjs';
 import { scheduleResumeAfterReboot } from './lib/resume.mjs';
+import { fetchZimCatalog } from './lib/zim-catalog.mjs';
+import { downloadFile } from './lib/download.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
@@ -79,18 +81,38 @@ function estimateGB(items) {
   return Math.max(1, Math.round(bytes / 1e9));
 }
 
-async function askQuestions(t, env, state) {
+const humanGB = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} ГБ` : `${(b / 1e6).toFixed(0)} МБ`);
+const ZIM_LANG = { ru: 'rus', en: 'eng' };
+
+// Выбор баз знаний из живого каталога Kiwix (идея 12): понятный список — что есть, что содержит,
+// сколько весит; пользователь отмечает нужные. Возвращает массив {url,file,sizeBytes,title}.
+async function pickZims(t, lang) {
+  if (!(await confirm(t('q_libs'), false))) return [];
+  const query = await text(t('zim_search'), { def: '' });
+  console.log(`\n${t('zim_fetching')}`);
+  let list;
+  try { list = await fetchZimCatalog({ lang: ZIM_LANG[lang] || 'eng', query: query || undefined, count: 40 }); }
+  catch (e) { console.log(`  ⚠ ${e.message}`); return []; }
+  if (!list.length) { console.log(`  ${t('zim_none')}`); return []; }
+  const opts = list.map((z) => ({
+    key: z.file,
+    label: `${z.title} — ${humanGB(z.sizeBytes)} — ${z.lang}${z.articleCount ? ` — ${z.articleCount} ст.` : ''}`,
+    z,
+  }));
+  const chosen = await multiselect(t('zim_pick'), opts);
+  return chosen.map((k) => opts.find((o) => o.key === k).z);
+}
+
+async function askQuestions(t, env, state, lang) {
   const a = state.answers || {};
-  if (YES) {
-    return { anonymous: false, model: 'main', libs: false, zim: false, ...a };
-  }
+  if (YES) return { anonymous: false, model: 'main', zims: [], ...a };
   a.anonymous = await confirm(t('q_anonymous'), a.anonymous ?? false);
   a.model = await select(t('q_model'), [
     { key: 'main', label: t('model_main') },
     { key: 'backup', label: t('model_backup') },
     { key: 'both', label: t('model_both') },
   ], 0);
-  a.libs = await confirm(t('q_libs'), a.libs ?? false);
+  a.zims = await pickZims(t, lang);
   return a;
 }
 
@@ -158,14 +180,15 @@ async function main() {
   if (!env.internet) { line(`\n⚠ ${t('no_internet')}`); return; }
 
   // ── Вопросы (Ф3) ──
-  const answers = await askQuestions(t, env, state);
+  const answers = await askQuestions(t, env, state, lang);
   state.answers = answers;
   saveState(ROOT, state);
   markDone(ROOT, state, 'questions');
 
-  // ── Смета + проверка места ──
+  // ── Смета + проверка места (включая выбранные базы знаний .zim) ──
   const items = itemsFor(answers, env);
-  const gb = estimateGB(items);
+  const zimBytes = (answers.zims || []).reduce((s, z) => s + z.sizeBytes, 0);
+  const gb = estimateGB(items) + Math.round(zimBytes / 1e9);
   if (env.freeDiskGB != null && env.freeDiskGB < gb + 5) {
     line(`\n⚠ ${t('not_enough_disk', { need: gb + 5, free: env.freeDiskGB })}`);
     return;
@@ -177,6 +200,15 @@ async function main() {
   line(`\n${t('installing')}`);
   const deployOk = runInherit('node', [join(ROOT, 'tools', 'deploy.mjs'), '--apply', '--items', items.join(',')]);
   ['engine', 'model', 'docker', 'llama-swap'].forEach((p) => markDone(ROOT, state, p));
+
+  // Базы знаний (.zim) из каталога Kiwix → kiwixdb/ (kiwix подхватит при подъёме стека).
+  if ((answers.zims || []).length) {
+    line(`\n${t('zim_downloading')}`);
+    for (const z of answers.zims) {
+      try { await downloadFile(z.url, join(ROOT, 'kiwixdb', z.file), z.title); }
+      catch (e) { line(`  ⚠ ${z.file}: ${e.message}`); }
+    }
+  }
 
   // Анонимизация (если выбрана) — обезличить файлы проекта.
   if (answers.anonymous && existsSync(join(ROOT, 'tools', 'anonymize.mjs'))) {
@@ -216,8 +248,11 @@ async function main() {
   clearState(ROOT); // успешный финал — прогресс больше не нужен
 }
 
-main().catch((e) => {
-  if (e instanceof QuitSignal) { const t = makeT(loadState(ROOT).lang || 'en'); console.log(`\n${t('bye')}`); process.exit(0); }
-  console.error(`\n✖ ${e.stack || e.message}`);
-  process.exit(1);
-});
+main()
+  .then(() => closePrompts())
+  .catch((e) => {
+    closePrompts();
+    if (e instanceof QuitSignal) { const t = makeT(loadState(ROOT).lang || 'en'); console.log(`\n${t('bye')}`); process.exit(0); }
+    console.error(`\n✖ ${e.stack || e.message}`);
+    process.exit(1);
+  });
