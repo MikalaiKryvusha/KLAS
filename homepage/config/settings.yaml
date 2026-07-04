@@ -17,4 +17,5 @@ disableHostValidation: true
 allowIframe: true
 host: 0.0.0.0
 
-base: https://krinikspc.forest-ratio.ts.net/homepage
+# base НЕ задаём: homepage — корневое приложение (ассеты идут от /), а за Caddy/funnel пульт
+# смонтирован на КОРНЕ (баг 02). Прежнее base=https://.../homepage было неэффективно и путало.

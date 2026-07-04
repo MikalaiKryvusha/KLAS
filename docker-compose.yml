@@ -66,7 +66,7 @@ services:
       - "F:/KLAS/logo/android-chrome-192x192.png:/app/public/android-chrome-192x192.png"
       - "F:/KLAS/logo/android-chrome-512x512.png:/app/public/android-chrome-512x512.png"
     environment:
-      - HOMEPAGE_VAR_BASE_URL=/homepage
+      # base НЕ задаём — пульт смонтирован на КОРНЕ за Caddy/funnel (баг 02); homepage корневой.
       - HOMEPAGE_ALLOWED_HOSTS=localhost:3005,127.0.0.1:3005,krinikspc.forest-ratio.ts.net
     restart: unless-stopped
 
