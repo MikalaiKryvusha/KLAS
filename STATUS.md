@@ -44,6 +44,11 @@
 - **Jarvis (idea 05) дополнен:** **выбор личности** — Jarvis (муж., как у Тони Старка) ↔ **Joi** (жен.,
   по «Бегущему по лезвию 2049»: мягкая, добрая, услужливая; голос девичий, женственный, бархатный).
   Перед реализацией персон/голосов — `/interview`.
+- **Связка хост ↔ Android-клиент ↔ носимое устройство** (вопрос владельца): 🔬 исследование
+  `researches/07_jarvis_wearable_transport.md` + план `plans/07_jarvis_gateway_and_client.md`.
+  Вывод: НЕ «обширный кастомный API», а **тонкий Jarvis Gateway** (realtime-голос WS/WebRTC + маленький
+  control-API) поверх **уже развёрнутого Tailscale** и llama-server `/v1`; каскад STT(Whisper)→LLM→TTS(Piper)
+  со стримингом+barge-in; on-device wake word на Android; голос только в tailnet (приватность). 5 фаз.
 
 
 

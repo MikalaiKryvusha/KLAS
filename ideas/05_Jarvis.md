@@ -120,6 +120,21 @@ J.A.R.V.I.S. почти как с живым человеком и даже лу
 разработки точной уверенности нет, но, вероятно, это будет homepage (возможно, другой аналог, если
 решим, что homepage нас не удовлетворяет).
 
+## Носимый доступ: связка хост ↔ Android-клиент ↔ гарнитура/очки
+
+Чтобы «ходить по городу и говорить с Jarvis/Joi», нужен транспортный слой между ИИ-хостом KLAS и
+носимым Android-клиентом Криника. Проработано отдельно:
+- **Знания:** [researches/07_jarvis_wearable_transport.md](../researches/07_jarvis_wearable_transport.md) —
+  транспорт (WebRTC/WebSocket), пайплайн голоса (каскад STT→LLM→TTS + стриминг/barge-in), Android-нюансы
+  (wake word, фон, Bluetooth), что заимствовать (Wyoming, Pipecat, LiveKit, HA Companion App).
+- **План:** [plans/07_jarvis_gateway_and_client.md](../plans/07_jarvis_gateway_and_client.md) — **тонкий
+  Jarvis Gateway** (realtime-голос + маленький control-API) поверх уже развёрнутого Tailscale и
+  llama-server `/v1`; голос только в tailnet (приватность). 5 фаз.
+
+> Вывод по гипотезе владельца «нужен обширный кастомный API»: API-граница нужна, но **тонкая и
+> стандартная** (по образу OpenAI Realtime / Wyoming), а не обширная — большую часть даёт существующая
+> инфраструктура KLAS (Tailscale + llama-server).
+
 ## Голос: синтез голосом Владимира Вихрова
 
 Для Jarvis нужно найти языковую библиотеку синтеза речи **голосом Владимира Вихрова** — того самого,
