@@ -1,0 +1,276 @@
+# Research 09 — Сборка KLAS «конструктором» из готовых OSS-модулей (карта, июль 2026)
+
+> Живой справочник (тег `DONE` не ставится). Мотивирован вопросом владельца (2026-07-16): *«Возможно
+> гораздо быстрее и проще собирать KLAS конструктором из имеющихся решений, чем всё с нуля писать —
+> собирать крупные готовые модули и обвязывать самописной обвязкой»*.
+> Метод: **снимок GitHub API от 2026-07-16** (`gh api` по ~60 репозиториям: звёзды, активность,
+> archived, лицензии — точные цифры) + веб-поиск по 5 направлениям. ⚠️ Fetch-верификация части
+> источников не завершена (лимит сессии) — утверждения уровня «сниппет поиска» помечены ⚠️.
+> Дата: 2026-07-16.
+
+---
+
+## 0. Прямой ответ владельцу
+
+**Да — и KLAS уже так устроен.** Всё ядро — заимствованные крупные модули: llama.cpp, llama-swap,
+Open WebUI, Kiwix, homepage, Caddy, Tailscale. Самописное в KLAS — только тонкая обвязка (deploy.mjs,
+klas.ps1, харнесс, Caddyfile). Вопрос не «переходить ли на конструктор», а **какие крупные блоки брать
+для следующих этажей** — эпика ассистента (Jarvis/Joi, plans/08). Ответ по итогам ревизии поля:
+
+1. **Главная новость поля — [OpenClaw](https://github.com/openclaw/openclaw)** (экс-Clawdbot/Moltbot):
+   **383 100 ⭐, TypeScript/Node, MIT** (© 2026 OpenClaw Foundation), активен ежедневно. Это готовое
+   «агентное ядро персонального ассистента»: **навыки-CRUD в формате `SKILL.md`** (буквально модель
+   скиллов Claude из idea 05!), реестр навыков ClawHub, память, 20+ каналов (Telegram/WhatsApp/…),
+   cron/webhooks, **Android-нода** (камера, экран, команды устройства, Voice Wake/Talk),
+   **локальные LLM через OpenAI-совместимые провайдеры** (Ollama/LM Studio/vLLM/кастомные — llama-server
+   встаёт нативно). Закрывает разом большую часть plans/07 Фазы 2 (control-API, навыки, память) и,
+   возможно, Android-клиент (пересмотр Q4). Риски — §3.4.
+2. **Русский голосовой тракт собирается из готового целиком** (§3.1–3.3): STT —
+   **sherpa-onnx + GigaAM-v3** (MIT, SOTA по русскому, стриминг, нативно Windows); TTS на старт —
+   **Silero v5** (MIT, 29 русских голосов, CPU); клоны Вихрова/Joi — **CosyVoice 3** (Apache-2.0,
+   русский + zero-shot клон) / **Chatterbox Multilingual V3** (MIT) / **F5-TTS_RUSSIAN** (файнтюн
+   5000+ ч русского); каркас каскада — **Pipecat v1.0** (barge-in и turn detection из коробки).
+3. **Управление Windows 11 — [Windows-MCP](https://github.com/CursorTouch/Windows-MCP)** (6 439 ⭐,
+   MIT, активен): весь контроль ПК (мышь/клавиатура/запуск/UIA-дерево/shell) — один MCP-эндпоинт.
+   Тяжёлая альтернатива-комбайн — Microsoft **UFO³**.
+4. **Чего готовым не существует** (наша уникальная работа, §5): поведение персон Jarvis/Joi, PAI,
+   контур доверия/duress (компоненты есть, интеграция наша), **ротация памяти по лимиту места**,
+   обучение голосов, вся KLAS-интеграция.
+
+**Стратегическая рамка:** сборка = 3 варианта архитектуры (§4). Выбор ядра ассистента — владельческая
+развилка → `/interview` (§7). До интервью ничего из ядра не меняем.
+
+---
+
+## 1. Инвентарь: KLAS уже конструктор
+
+| Подсистема | Крупный модуль (уже в проде) | Наша обвязка |
+|---|---|---|
+| LLM-движок | llama.cpp/llama-server | bat-профили, health-check.ps1 |
+| «Спит, пока не позовут» | llama-swap | config.yaml, автостарт |
+| Семейный чат | Open WebUI | env-конфиг, kiwix-тул |
+| База знаний | Kiwix (+ .zim) | манифест deploy |
+| Пульт | homepage + llama-swap UI | services.yaml, Caddy-роутинг |
+| Вход/TLS | Caddy | Caddyfile |
+| Транспорт | Tailscale (tailnet+funnel) | klas.ps1, funnel-bat |
+| Развёртывание | — | **deploy.mjs (своё)** |
+
+Паттерн подтверждён практикой: свои — только клей и харнесс. Так же строим ассистента.
+
+## 2. Карта «хотелка → рекомендуемый модуль → что дописываем»
+
+| Хотелка (документ) | Рекомендация (крупный модуль) | Альтернативы | Своя обвязка |
+|---|---|---|---|
+| Каскад голоса STT→LLM→TTS, barge-in (plans/07 Ф1) | **Pipecat** (каркас) | LiveKit Agents (WebRTC-прод), паттерн RealtimeVoiceChat | конфиг пайплайна, интеграция llama-server |
+| Русский стриминг-STT | **sherpa-onnx + GigaAM-v3** | T-one (телефония), whisper.cpp, Vosk | запуск как сервис, VAD-настройка |
+| Русский TTS сейчас | **Silero v5** (29 голосов, CPU) | piper1-gpl (GPL) | OpenAI-совместимый TTS-эндпоинт |
+| Клон голоса Вихрова/Joi (idea 05) | **CosyVoice 3 / Chatterbox V3 / F5-TTS_RUSSIAN** — отслушать | XTTS-v2 (CPML, некоммерч.) | сбор сэмплов, дообучение, A/B-отслушивание |
+| Wake word «Jarvis»/«Joi» | **openWakeWord** (есть пресет «Hey Jarvis») | microWakeWord (ESPHome) | обучение кастомных слов на синтетике |
+| Навыки-CRUD à la Claude (idea 05) | **MCP + SKILL.md** — стандарт де-факто 2026; готовая реализация — **OpenClaw** | свой роутер в Gateway | развилка §4 → interview |
+| Память с ротацией (idea 05) | **sqlite-vec** или **LanceDB** (+ Letta/Graphiti как референс политик) | Qdrant/Chroma (серверные — лишняя сущность) | **политика ротации/сжатия — пишем сами** |
+| Управление Windows 11 (idea 05) | **Windows-MCP** | UFO³ (комбайн), Windows-Use | allow-list команд, безопасность |
+| Зрение экрана (idea 05) | **UIA-дерево (через Windows-MCP) → OmniParser v2 → RapidOCR** по нарастанию | PaddleOCR (точность), gemma-4-12b vision (уже есть!) | слоёный пайплайн, зрительная память |
+| Android-клиент (Q4 интервью 003) | HA Companion App (решение Q4) **или Android-нода OpenClaw** — пересмотр | свой клиент | развилка §7 |
+| Second-brain хаб | **не брать** — роль закрыта Open WebUI + ядром ассистента | Khoj (AGPL), AnythingLLM, n8n (fair-code, не OSS) | — |
+
+## 3. Подсистемы детально
+
+Все цифры «⭐ / активность» — снимок GitHub API 2026-07-16.
+
+### 3.1 Готовые голосовые платформы (каскад целиком)
+
+| Проект | ⭐ | Активность | Лицензия | Вердикт для KLAS |
+|---|---|---|---|---|
+| **pipecat-ai/pipecat** | 13 450 | ежедневно | BSD-2 | ✅ **Каркас каскада.** v1.0 (апр 2026 ⚠️), 60+ интеграций, полностью локальный путь (Whisper/локальный TTS/OpenAI-совместимый LLM), barge-in + smart turn detection из коробки. Python — допустимо по принципу стека (интервью 003 ⚠️). Wake word не входит — обвязать openWakeWord |
+| **livekit/agents** | 11 379 | ежедневно | Apache-2.0 | Для WebRTC-прода (plans/07 Ф5). Есть **Node.js SDK**. Минус: тянет LiveKit-сервер — лишняя сущность для дома, брать позже |
+| **KoljaB/RealtimeVoiceChat** | 3 799 | ⚠️ год без коммитов | MIT | Ближайший к «готовому Jarvis целиком» (полный дуплекс, браузер-клиент, Docker), но сам репо застыл. Его кирпичи живы: **RealtimeSTT** (9 988 ⭐, июнь 2026), **RealtimeTTS** (3 988 ⭐, май 2026) — донор паттернов |
+| **dnhkng/GLaDOS** | 5 632 | июнь 2026 | MIT | Референс «ассистента с личностью» (round-trip < 600 мс, персона из динамического контекста). Донор кода, не фреймворк |
+| HA Assist + Wyoming | HA core 89 427 | ежедневно | Apache-2.0 | Зрелая «бытовая» связка, но: **rhasspy3 и wyoming-satellite — архив**, Piper заморожен (окт 2025) → жизнь в OHF-Voice; разговорный LLM-диалог и персоны слабее. Смысл — только при HA-центричном варианте (§4B) |
+| kyutai unmute / moshi | 1 362 / 10 593 | активны | MIT/Apache | Красиво (стриминг-LLM-голос), но фокус EN/FR — русского нет ⚠️ → мимо |
+| HeyWillow/willow | 3 073 | фев 2026 | Apache-2.0 | ESP32-сателлиты, не наш форм-фактор |
+
+**Вывод:** Pipecat как каркас Фазы 1 plans/07 (вместо самописного оркестратора), GLaDOS/RealtimeVoiceChat —
+доноры решений по задержке/barge-in. LiveKit — отложить до мобильного прода.
+
+### 3.2 Русский streaming STT
+
+| Проект | ⭐ | Лицензия | Факты |
+|---|---|---|---|
+| **salute-developers/GigaAM** | 683 | **MIT** | SOTA по русскому: v3 (нояб 2025) — пунктуация/нормализация e2e, победа 70:30 в SbS против Whisper-large-v3 (README); v2: WER ~3.3% vs ~7.9% у Whisper ⚠️; июнь 2026 — Multilingual-линейка (2M часов, 70+ языков). ONNX-экспорт |
+| **k2-fsa/sherpa-onnx** | 13 599 | Apache-2.0 | Рантайм: стриминг, **нативно Windows**, websocket-сервер из коробки, Node-биндинги. Есть **готовая конвертация GigaAM-v3-transducer** (HF, дек 2025) — связка = крупный модуль стриминг-STT без Python |
+| voicekit-team/T-one | 270 | Apache-2.0 ⚠️ | Русский стриминг ~70M параметров, но домен — телефония 8 кГц; для микрофона ассистента — вторично |
+| ggml-org/whisper.cpp | 51 850 | MIT | Мультиязычный запасной; по русскому уступает GigaAM (⚠️ бенчи Хабра); уже в нашей экосистеме ggml |
+| SYSTRAN/faster-whisper | 24 317 | MIT | Питон-стандарт, но 8 мес. без пуша; Pipecat его умеет |
+| alphacep/vosk-api | 14 945 | Apache-2.0 | Лёгкий, стриминг, но качество поколения назад |
+
+**Вывод:** **sherpa-onnx + GigaAM-v3** — рекомендация (русское SOTA, стриминг, Windows-нативно,
+websocket из коробки, всё MIT/Apache). whisper.cpp — держать как мультиязычный fallback.
+
+### 3.3 Русский TTS + клонирование (голоса Вихрова/Joi)
+
+| Проект | ⭐ | Лицензия | Русский | Клон | Вердикт |
+|---|---|---|---|---|---|
+| **snakers4/silero-models** (v5) | 6 014 | MIT (v5 ⚠️; v3/v4 были NC) | ✅ 29 голосов, ударения/омографы | ❌ | ✅ **Голос «на сейчас»**: стабильный, CPU (RTF ~0.04 ⚠️), нулевой VRAM — идеален до готовности клонов |
+| **FunAudioLLM/CosyVoice 3** | 22 208 | **Apache-2.0** | ✅ (9 языков, README) | ✅ zero-shot + кросс-язычный | ✅ **Кандидат №1 на клоны**: лицензия чистая, русский официально |
+| **resemble-ai/chatterbox** V3 | 25 537 | **MIT** | ✅ (мультиязычная линейка вкл. русский ⚠️) | ✅ zero-shot по 1 сэмплу; watermark PerTh | ✅ **Кандидат №2**: 0.5B — легко рядом с LLM в 16 GB |
+| **F5-TTS_RUSSIAN** (HF, Misha24-10) | — | база F5 MIT-код, веса CC-BY-NC ⚠️ | ✅ файнтюн 5000+ ч (Common Voice/Sova/LibriHeavy), RUAccent | ✅ zero-shot 3–10 с, ~3 GB VRAM ⚠️ | ✅ **Кандидат №3**: спец-русский; NC-веса ок для личного KLAS |
+| coqui XTTS-v2 (idiap-форк) | 45 758 / 2 290 | CPML — **некоммерч.** | ✅ (17 языков) | ✅ + дообучение | Запасной: лицензия ограничивает будущее |
+| RVC-Boss/GPT-SoVITS | 59 839 | MIT | ❌ **официально нет русского** (zh/en/ja/ko/yue) | ✅ 1 мин | Отсев, пока русские форки не докажут качество |
+| OHF-Voice/piper1-gpl | 4 804 | GPL-3.0 | ✅ голоса ru_RU | обучение своих | Быстрый CPU-вариант; классический rhasspy/piper — архив |
+| fishaudio/fish-speech · Zyphra/Zonos · RVC | 31 281 / 7 230 / 36 449 | веса NC ⚠️ / Apache / MIT | част. | ✅ | Fish — NC-веса; Zonos и RVC — стухли (2025-03 / 2024-11) |
+
+**Вывод:** старт — **Silero v5** (приоритет владельца «стабильность»); для клонов Вихрова/Joi —
+**A/B-отслушивание CosyVoice 3 vs Chatterbox V3 vs F5-TTS_RUSSIAN** на референс-сэмплах (это домашка
+с ушами владельца). Дообучение на RTX 5070 Ti реалистично у всех трёх. ⚖️ Этика/право: клон голоса
+реального актёра — строго личное использование, наружу не публикуем (совпадает с приватностью KLAS).
+
+### 3.4 Агентное ядро: навыки-CRUD + память
+
+**OpenClaw** — проверено по первоисточнику (LICENSE, README, docs):
+- **MIT** (© 2026 OpenClaw Foundation), **TypeScript/Node 22+** — родной стек KLAS; 383 100 ⭐, коммиты ежедневно.
+- **Навыки: `~/.openclaw/workspace/skills/<skill>/SKILL.md`** + реестр ClawHub — ровно «система навыков
+  à la слеш-команды Claude» из idea 05, с CRUD-циклом.
+- Память между разговорами, cron, webhooks, 20+ каналов, **Android-нода**: Voice Wake, Talk Mode,
+  камера, захват экрана, команды устройства (⚠️ TTS там ElevenLabs/системный — локальный русский голос
+  всё равно обвязываем свой).
+- **Локальные модели: провайдеры Ollama/LM Studio/vLLM + кастомные `models.providers`** (OpenAI-совместимые)
+  — llama-server подключается конфигом.
+- **Риски:** (1) docs предупреждают: для tool-агентов слабые модели не годятся — наши 9–35B могут
+  «не вывозить» его агентный цикл → **пилот с замером на agent-bench обязателен до решения**;
+  (2) безопасность: мощный агент с shell-доступом и каналами — держать строго в tailnet (истории с
+  публично открытыми инстансами нач. 2026 ⚠️); (3) зависимость от огромного быстро движущегося проекта.
+
+**Память (слои поверх/рядом):** Letta/MemGPT (23 813 ⭐, Apache) — tiered self-editing память;
+mem0 (60 960 ⭐, Apache, **TS**) — персонализация; Zep/Graphiti (28 796 ⭐, Apache) — темпоральный граф
+знаний (LongMemEval: Zep 63.8% vs Mem0 49.0% ⚠️); cognee (27 971 ⭐). Единого победителя нет ⚠️ —
+и **ни один не реализует нашу «ротацию по лимиту ГБ»** (§5).
+
+**Стандарт навыков 2026:** MCP-серверы для интеграций + SKILL.md для экспертизы ⚠️ — модель, в которой
+KAIF/Claude уже живут. Что бы мы ни выбрали ядром, навыки строим как MCP+SKILL.md → переносимы.
+
+Примечания по соседям: Open Interpreter пивотнулся (теперь Rust-«coding agent for low-cost models») —
+из кандидатов вон; Goose (51 277 ⭐, Rust, Apache) — жив, но кодинг-ориентирован; LangGraph/Agno —
+фреймворки-конструкторы, а не готовые ассистенты (не «крупный модуль»).
+
+### 3.5 Управление Windows 11
+
+| Проект | ⭐ | Лицензия | Суть |
+|---|---|---|---|
+| **CursorTouch/Windows-MCP** | 6 439 | MIT | ✅ **Рекомендация**: мышь/клавиатура/запуск программ/UIA-дерево/shell как MCP-инструменты (Win 7–11). Весь «PC-контроль» = один MCP-эндпоинт; ~1.5–2.3 с/действие ⚠️ |
+| CursorTouch/Windows-Use | 255 | MIT | Тот же автор, агент поверх **UIA-дерева** (без VLM для большинства задач), 13 LLM-провайдеров вкл. локальные |
+| **microsoft/UFO (UFO³)** | 9 285 | MIT | Комбайн-«AgentOS»: HostAgent+AppAgents, гибрид UIA+OmniParser, **Picture-in-Picture изолированный рабочий стол** (агент не отбирает мышь!), спекулятивное исполнение. Мощно, но тяжело — вариант «если захотим всё» |
+| OthersideAI/self-operating-computer | 10 247 | MIT | Застыл (сент 2025) |
+| nut-tree/nut.js | 2 840 | ушёл в коммерцию | Отсев (пуш 2024-05) |
+
+**Ключевой практический вывод** ⚠️ (сходятся практики): чистое «зрение-и-клики» ненадёжно (лучшие
+computer-use агенты < 50% на OSWorld) — правильный порядок: **UIA-дерево сначала, зрение — fallback**.
+Это дёшево нам: UIA уже отдаёт Windows-MCP.
+
+### 3.6 Зрение экрана + русский OCR
+
+Слоёный подход (по нарастанию стоимости): **(1)** UIA-дерево (Windows-MCP, «зрение без пикселей») →
+**(2)** OmniParser v2 (25 151 ⭐, CC-BY-4.0, пуш апр 2026): скриншот → структурированные интерактивные
+элементы, YOLO+caption влезают в наши 16 GB → **(3)** OCR: **RapidOCR** (7 169 ⭐, Apache; модели
+PaddleOCR поверх ONNX Runtime без тяжёлой Paddle-зависимости, ~80 MB ⚠️ — прагматичный Windows-sidecar)
+или PaddleOCR PP-OCRv5 (85 611 ⭐; топ-точность, русский) → **(4)** VLM-описание: **gemma-4-12b уже
+мультимодальна** (есть у нас!), альтернативы Qwen-VL/UI-TARS-7B GGUF на llama-server. Наш web-shot.mjs
+остаётся «глазами в вебе».
+
+### 3.7 Векторная память («библиотека памяти» Jarvis)
+
+- **sqlite-vec** (7 889 ⭐, Apache, C-расширение SQLite): нулевая инфраструктура, Node-нативно —
+  идеален под «минимум сущностей» для персональных объёмов.
+- **LanceDB** (10 907 ⭐, Apache): in-process, диск, мультимодальность (текст+картинки), «SQLite среди
+  векторных БД», RAM ~4–150 MB ⚠️ — кандидат, если зрительная память перерастёт sqlite-vec.
+- Qdrant (33 317 ⭐)/Chroma (28 805 ⭐) — серверные, ~400 MB RAM всегда ⚠️ — против минимализма, не брать.
+- Эмбеддинги: текст — через llama-server (`/v1/embeddings`, llama-swap умеет матрицу моделей);
+  картинки — CLIP/SigLIP.
+
+**Ротация по лимиту ГБ (сжатие старого в сводки, деградация картинка→текст) — готового нет: пишем
+сами** поверх выбранной БД; референс политик — Letta (tiered memory) и практика сжатия контекста агентов.
+
+### 3.8 Second-brain хабы (Khoj/AnythingLLM/LibreChat/n8n)
+
+Khoj (35 760 ⭐, AGPL), AnythingLLM (63 377 ⭐, MIT), LibreChat (40 804 ⭐, MIT — теперь тоже с
+Agents/Skills/MCP) — зрелые, но **дублируют роль уже развёрнутого Open WebUI** и будущего ядра
+ассистента → не брать (минимум сущностей). n8n (196 637 ⭐) мощен как «навыки-как-workflows», но
+**fair-code, не OSS**, и это ещё одна крупная сущность — только если появится реальная потребность в
+десятках интеграций.
+
+## 4. Три варианта сборки эпика ассистента
+
+**A. OpenClaw-центричный.** OpenClaw = ядро (навыки/память/каналы/cron/Android-нода) + llama-server
+провайдером + голосовой sidecar (Pipecat: sherpa-onnx-GigaAM → LLM → Silero/клоны) + Windows-MCP.
+*Меньше всего писать; максимум готового (вкл. мобильный доступ); риски: ум локальной модели в его
+цикле, безопасность, зависимость от гиганта.*
+
+**B. HA-центричный.** Home Assistant + Wyoming + HA Companion App (решение Q4). *Даёт wake
+word/Android/сателлиты «бытового» класса, но разговорная часть слабее (Piper/Rhasspy заморожены),
+LLM-агентность пришивается сбоку; оправдан, если появится умный дом.*
+
+**C. Свой тонкий Gateway (текущий plans/07) из модулей.** Pipecat-каркас + sherpa-onnx-GigaAM +
+Silero/клоны + Windows-MCP + sqlite-vec + MCP/SKILL.md-навыки. *Максимум контроля и минимальный
+привнесённый объём чужого кода; писать больше всех (но сильно меньше, чем «с нуля»: каркас, STT, TTS,
+PC-контроль — готовые).*
+
+**Рекомендация агента:** гибрид **C → A**: Фазу 1 plans/07 («скелет разговора») собирать сразу из
+модулей §3.1–3.3 (это полезно при любом исходе), параллельно — **пилот OpenClaw в tailnet** на
+llama-server с замером agent-bench-задач в его цикле. Развилку ядра решать интервью **после пилота**,
+на фактах. Вариант B не выбирать, пока нет умного дома.
+
+## 5. Чего OSS не даёт — наша уникальная работа
+
+1. **Поведение персон Jarvis/Joi** (Q2: «коллега отдыхает», переключение) — промпт/логика наша.
+2. **PAI** (генератор протоколов на Web Audio/Tone.js + тренажёр) — аналогов нет (см. pai_plan).
+3. **Контур доверия/duress** (plans/09) — компоненты есть (SpeechBrain и др., research 08),
+   интеграция и модель доверия — наши.
+4. **Ротация памяти по лимиту ГБ** с деградацией носителя (картинка→текст→сводка) — пишем сами (§3.7).
+5. **Голоса Вихрова/Joi** — сбор сэмплов, дообучение, отслушивание (§3.3).
+6. **KLAS-обвязка**: deploy-манифесты, пульт-интеграция, харнесс, безопасность tailnet — как и раньше.
+
+## 6. Влияние на планы (что упрощается)
+
+- **plans/07 Фаза 1:** вместо самописного оркестратора — Pipecat; STT-слот — sherpa-onnx+GigaAM-v3
+  (не faster-whisper по умолчанию); TTS-слот — Silero v5 (не Piper: он в заморозке/GPL).
+- **plans/07 Фазы 2, 4:** появление OpenClaw ставит развилку «свой Gateway vs готовое ядро» и
+  пересмотр Q4 (HA Companion vs Android-нода OpenClaw) → §7.
+- **idea 05 (Windows-контроль, зрение):** закрывается связкой Windows-MCP + слоёное зрение §3.6 —
+  «JIT-компиляция управления» не нужна, есть готовые действия + UIA.
+- **MASTER_PLAN:** при следующей `/revision` вписать стратегию «конструктор из крупных модулей»
+  ссылкой на это исследование.
+
+## 7. Развилки для `/interview` (не решать в одиночку)
+
+1. **Ядро ассистента:** пилот OpenClaw → потом выбор A/C (§4)? Или сразу C без пилота?
+2. **Android:** остаёмся на HA Companion (Q4) или пересматриваем в пользу ноды OpenClaw?
+3. **TTS-клоны:** согласие на домашку-отслушивание 3 кандидатов (§3.3); сбор референс-сэмплов
+   Вихрова/Joi — источники за владельцем.
+4. **Windows-контроль:** объём полномочий агента над ПК (allow-list) — вопрос безопасности уровня владельца.
+
+## Источники
+
+**Первоисточники (проверено 2026-07-16):** снимок GitHub API `gh api repos/*` по ~60 репозиториям
+(звёзды/пуши/archived/лицензии — все цифры в таблицах); LICENSE и README openclaw/openclaw;
+docs.openclaw.ai/concepts/models; README GigaAM (v3/Multilingual, MIT), CosyVoice 3 (9 языков вкл.
+русский), Chatterbox (Multilingual V3), Windows-MCP.
+
+**Веб-поиск (сниппеты, ⚠️ без полной fetch-верификации):**
+[GigaAM-v3 (Хабр/SberDevices)](https://habr.com/ru/companies/sberdevices/articles/973160/) ·
+[T-one (Хабр/Т-Банк)](https://habr.com/ru/companies/tbank/articles/929850/) ·
+[WER 33%→3.3% GigaAM vs Whisper vs Vosk (Хабр)](https://habr.com/ru/articles/1002260/) ·
+[ловушки ASR-бенчей (Хабр)](https://habr.com/ru/articles/1042574/) ·
+[GigaAM-v3 transducer для sherpa-onnx (HF)](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-giga-am-v3-russian-2025-12-16) ·
+[F5-TTS_RUSSIAN (HF)](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN) ·
+[лицензии локальных TTS 2026 (promptquorum)](https://www.promptquorum.com/power-local-llm/local-tts-voice-cloning-piper-coqui-xtts) ·
+[Silero v5 (Хабр)](https://habr.com/en/articles/961930/) ·
+[тест памяти агентов Mem0/Zep/Letta/cognee (particula)](https://particula.tech/blog/agent-memory-frameworks-tested-mem0-zep-letta-cognee-2026) ·
+[Skills vs MCP (sneekes)](https://sneekes.app/posts/skills-vs-mcp-servers-and-the-future-of-personal-ai-agents/) ·
+[сравнение 5 систем памяти (Medium)](https://medium.com/@wasowski.jarek/i-compared-5-ai-agent-memory-systems-across-6-dimensions-none-wins-6a658335ed0a) ·
+[векторные БД 2026 (firecrawl)](https://www.firecrawl.dev/blog/best-vector-databases) ·
+[UFO²/UFO³ docs (Microsoft)](https://microsoft.github.io/UFO/ufo2/overview/) ·
+[PaddleOCR vs Tesseract vs RapidOCR (codesota)](https://www.codesota.com/ocr/paddleocr-vs-tesseract) ·
+[UI-TARS / реальность computer-use (localaimaster)](https://localaimaster.com/blog/ui-tars-desktop-automation) ·
+[конец Rhasspy/Piper (форум Rhasspy)](https://community.rhasspy.org/t/2026-the-real-future-of-rhasspy-the-end/5872) ·
+[Pipecat](https://github.com/pipecat-ai/pipecat) · [LiveKit Agents](https://github.com/livekit/agents) ·
+[GLaDOS](https://github.com/dnhkng/GLaDOS) · [RealtimeVoiceChat](https://github.com/KoljaB/RealtimeVoiceChat) ·
+[Wyoming (HA)](https://www.home-assistant.io/integrations/wyoming/)
