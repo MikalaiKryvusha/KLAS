@@ -36,6 +36,25 @@
 5. **Wake word:** ✅ on-device (microWakeWord/openWakeWord) + запасная кнопка на гарнитуре.
 6. **Внешний доступ:** ✅ только tailnet (Q5). 7. **Персоны:** ✅ дефолт Jarvis, обе на оба имени (Q2, см. idea 05).
 
+## Обновление после ревизии OSS-поля (✅ интервью 004, 2026-07-16)
+
+Ревизия [researches/09_oss_constructor_map.md](../researches/09_oss_constructor_map.md) уточнила
+конкретные модули (принцип владельца: **протухшие OSS не брать — только живые**):
+
+1. **Ядро/Gateway:** перед Фазой 2 — **короткий смоук-пилот [OpenClaw](https://github.com/openclaw/openclaw)**
+   (Node/TS, MIT, навыки-SKILL.md, память, Android-нода, локальные LLM) в tailnet на llama-server:
+   вывозит ли наша локальная модель его агентный цикл. Выбор «OpenClaw vs свой Gateway» — на фактах пилота.
+2. **STT:** ~~Whisper.cpp~~ → **sherpa-onnx + GigaAM-v3** (MIT; SOTA по русскому, стриминг, нативно
+   Windows, websocket-сервер). whisper.cpp — мультиязычный fallback.
+3. **TTS старт:** ~~Piper~~ (заморожен, преемник GPL) → **Silero v5** (MIT, 29 русских голосов,
+   ударения, CPU). Клоны Вихрова/Joi — слепой A/B: CosyVoice 3 / Chatterbox V3 / F5-TTS_RUSSIAN (Q3 инт. 004).
+4. **Каркас каскада (Фаза 1):** **Pipecat v1.0** (BSD-2; barge-in + turn detection из коробки) вместо
+   самописного оркестратора; wake word обвязываем openWakeWord (пресет «Hey Jarvis» есть).
+5. **Android (Фаза 4):** клиент следует за ядром — при OpenClaw-бекенде берём **его Android-ноду**
+   (Voice Wake/Talk Mode готовы), форк HA Companion — только если ядро своё (Q2 инт. 004).
+6. **Windows-контроль (навыки Jarvis):** **Windows-MCP** (MIT), полномочия ступенчато с allow-list
+   (Q4 инт. 004): чтение UIA + белый список программ → мышь/клавиатура/shell позже.
+
 ---
 
 ## Фаза 0 — Исследование и требования ✅ (2026-07-07)
