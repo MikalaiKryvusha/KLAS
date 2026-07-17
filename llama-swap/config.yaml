@@ -50,6 +50,21 @@ models:
       - "qwen3.5-35b-r"
     ttl: 300
 
+  # КАНДИДАТ (идея 06, 2026-07-17): преемник основной — та же формула MoE A3B, но поколение 3.6.
+  # Speed-бенч: pp 3997 / tg 164 t/s (быстрее 3.5!), 12.73 GiB. Профиль — клон qwen3.5-35b
+  # (98K ctx, KV q8_0, сэмплинг Qwen) для честного сравнения agent-bench-v3. Решение по замене
+  # основной — за владельцем после бенчей (researches/02).
+  "qwen3.6-35b-a3b":
+    cmd: >
+      F:\KLAS\llamacpp\llama-server.exe
+      -m F:\KLAS\LLMs\LLAMACPP_MODELS\Qwen3.6-35B-A3B-UD-IQ3_S.gguf
+      --port ${PORT} -c 98304 -ctk q8_0 -ctv q8_0
+      -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+      -np 1 --slots --cont-batching
+      --temperature 0.7 --top-p 0.8 --top-k 20 --min-p 0
+      --chat-template-kwargs "{\"enable_thinking\": false}"
+    ttl: 300
+
   # Плотная 27B IQ3_XXS. Контекст поднят 32768 → 65536 (KV q8_0, VRAM 14.9) — ФИКС ошибки 400 из
   # Zoo Code (запрос 53854 токенов больше не падает). Медленная (52 t/s), квант на нижней границе.
   "qwen3.6-27b":
@@ -73,6 +88,19 @@ models:
       -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
       -np 1 --slots --cont-batching
       --chat-template-kwargs "{\"enable_thinking\": false}"
+    ttl: 300
+
+  # КАНДИДАТ (идея 06, 2026-07-17): OpenAI gpt-oss-20b MoE — САМАЯ БЫСТРАЯ у нас (pp 9303 / tg 252
+  # t/s, 11 GiB). Контекст 65536 (влезает с запасом; native 128K). Harmony-шаблон — reasoning
+  # средний по умолчанию; для агентских клиентов может требовать настройки reasoning (смотрим v3).
+  "gpt-oss-20b":
+    cmd: >
+      F:\KLAS\llamacpp\llama-server.exe
+      -m F:\KLAS\LLMs\LLAMACPP_MODELS\gpt-oss-20b-UD-Q4_K_XL.gguf
+      --port ${PORT} -c 65536
+      -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
+      -np 1 --slots --cont-batching
+      --chat-template-kwargs "{\"reasoning_effort\": \"low\"}"
     ttl: 300
 
   # gemma-4-12b: запасная + мультимодальная (зрение — задел под Jarvis, идея 05). Контекст 131K.
