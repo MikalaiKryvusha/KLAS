@@ -63,3 +63,6 @@ kaif-unpack.mjs
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Голосовой тракт (Г1+, plans/11): venv, веса моделей, артефакты синтеза — вне git
+voice/

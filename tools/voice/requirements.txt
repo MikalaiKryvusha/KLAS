@@ -1,0 +1,10 @@
+# Зависимости голосового venv (F:\KLAS\voice\venv) — фаза Г1, plans/11.
+# Установка (torch БЕЗ CUDA — синтезу хватает CPU, GPU бережём для LLM):
+#   python -m venv F:\KLAS\voice\venv
+#   F:\KLAS\voice\venv\Scripts\python.exe -m pip install -r tools/voice/requirements.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+# Модель Silero v5 ru (~145 МБ) качается сайдкаром при первом запуске; если у Python затык с SSL
+# (models.silero.ai) — bootstrap курлом:
+#   curl.exe -o F:\KLAS\voice\models\v5_ru.pt https://models.silero.ai/models/tts/ru/v5_ru.pt
+torch
+numpy
+scipy
