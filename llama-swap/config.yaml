@@ -28,12 +28,9 @@ models:
       --chat-template-kwargs "{\"enable_thinking\": false}"
     ttl: 300
 
-  # MoE 35B-A3B: самый «умный класс» из наших, быстрая (155 t/s). Контекст 98K (KV q8_0, VRAM ~15.6).
-  # Вариант «ум важнее скорости»: скорости с избытком, память ограничена VRAM 16 ГБ.
-  # Сэмплинг прижат к рекомендации Qwen для non-thinking (temp 0.7, top-p 0.8, top-k 20, min-p 0):
-  # дефолт llama-server (temp 0.8/top-p 0.95) провоцирует текст перед <tool_call>, который валит
-  # peg-парсер тул-коллов llama.cpp 500-кой «Failed to parse input at pos» (ggml-org/llama.cpp
-  # #20260, фикс апстрима частичный) — выяснено мини-бенчем OpenClaw 2026-07-17 (research 09 §3.4).
+  # Бывшая основная (фев→июль 2026) → FALLBACK до конца обкатки 3.6 (интервью 006 Q2=A), потом
+  # судьба решается отдельно. Цепочки в OpenClaw 5/6 (флейк write ~9%, peg-баг llama.cpp #20260 —
+  # research 09 §3.4). Сэмплинг Qwen non-thinking (дефолт сервера провоцировал текст перед <tool_call>).
   "qwen3.5-35b":
     cmd: >
       F:\KLAS\llamacpp\llama-server.exe
@@ -43,17 +40,13 @@ models:
       -np 1 --slots --cont-batching
       --temperature 0.7 --top-p 0.8 --top-k 20 --min-p 0
       --chat-template-kwargs "{\"enable_thinking\": false}"
-    # Алиас = ВТОРОЕ ИМЯ ТОГО ЖЕ инстанса (без свапа/второй VRAM): OpenClaw использует его как
-    # fallback-кандидата → при флейковой 500 парсера тул-коллов ретрай идёт НА ТУ ЖЕ модель,
-    # а не деградирует на gemma (слаба в цепочках, research 09 §3.4).
-    aliases:
-      - "qwen3.5-35b-r"
     ttl: 300
 
-  # КАНДИДАТ (идея 06, 2026-07-17): преемник основной — та же формула MoE A3B, но поколение 3.6.
-  # Speed-бенч: pp 3997 / tg 164 t/s (быстрее 3.5!), 12.73 GiB. Профиль — клон qwen3.5-35b
-  # (98K ctx, KV q8_0, сэмплинг Qwen) для честного сравнения agent-bench-v3. Решение по замене
-  # основной — за владельцем после бенчей (researches/02).
+  # ⭐ ОСНОВНАЯ модель KLAS (интервью 006, 2026-07-17): преемник qwen3.5 — та же формула MoE A3B,
+  # поколение 3.6 (апрель). Ум = 3.5 (v3 6.7), но ЦЕПОЧКИ В ЦИКЛЕ ЯДРА OpenClaw чище всех:
+  # 6/6 + format-hold 5/5 без флейков (у 3.5 был остаточный ~9% на peg-баге llama.cpp #20260).
+  # Speed: pp 3997 / tg 164 t/s, 12.73 GiB. Сэмплинг по рекомендации Qwen (non-thinking).
+  # Алиас -r = второе имя ТОГО ЖЕ инстанса: fallback №1 в OpenClaw → ретрай той же модели при 500.
   "qwen3.6-35b-a3b":
     cmd: >
       F:\KLAS\llamacpp\llama-server.exe
@@ -63,6 +56,8 @@ models:
       -np 1 --slots --cont-batching
       --temperature 0.7 --top-p 0.8 --top-k 20 --min-p 0
       --chat-template-kwargs "{\"enable_thinking\": false}"
+    aliases:
+      - "qwen3.6-35b-a3b-r"
     ttl: 300
 
   # Плотная 27B IQ3_XXS. Контекст поднят 32768 → 65536 (KV q8_0, VRAM 14.9) — ФИКС ошибки 400 из
@@ -90,20 +85,15 @@ models:
       --chat-template-kwargs "{\"enable_thinking\": false}"
     ttl: 300
 
-  # КАНДИДАТ (идея 06, 2026-07-17): OpenAI gpt-oss-20b MoE — САМАЯ БЫСТРАЯ у нас (pp 9303 / tg 252
-  # t/s, 11 GiB). Контекст 65536 (влезает с запасом; native 128K). Harmony-шаблон — reasoning
-  # средний по умолчанию; для агентских клиентов может требовать настройки reasoning (смотрим v3).
-  "gpt-oss-20b":
-    cmd: >
-      F:\KLAS\llamacpp\llama-server.exe
-      -m F:\KLAS\LLMs\LLAMACPP_MODELS\gpt-oss-20b-UD-Q4_K_XL.gguf
-      --port ${PORT} -c 65536
-      -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
-      -np 1 --slots --cont-batching
-      --chat-template-kwargs "{\"reasoning_effort\": \"low\"}"
-    ttl: 300
+  # gpt-oss-20b — отбенчен и ОТСЕЯН (интервью 006 Q3, 2026-07-17): скорость-рекорд (252 t/s), но ум
+  # 5.7/8 < критерия владельца «сопоставим с gemma (7.5) или лучше». Квант удалён; вернуть при
+  # нужде: node tools/try-model.mjs unsloth/gpt-oss-20b-GGUF gpt-oss-20b-UD-Q4_K_XL.gguf
+  # (+ проф. настройка: --chat-template-kwargs reasoning_effort=low — иначе reasoning ест max_tokens).
 
   # gemma-4-12b: запасная + мультимодальная (зрение — задел под Jarvis, идея 05). Контекст 131K.
+  # ⚠️ Владелец (2026-07-17): «гемма какая-то болезненная» — подтверждается данными: в чужом
+  # агентном цикле (OpenClaw) обрывает цепочки (3/6), жёсткий анти-репит сэмплинг ниже. В цепочках
+  # ядра НЕ использовать (research 09 §3.4); сильна как одноходовый агент в НАШЕМ цикле (v3 7.5).
   "gemma-4-12b":
     cmd: >
       F:\KLAS\llamacpp\llama-server.exe

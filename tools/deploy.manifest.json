@@ -12,12 +12,19 @@
       "dest": "llamacpp",
       "check": { "file": "llamacpp/llama-server.exe" }
     },
+    "model-qwen3.6-35b-a3b": {
+      "kind": "url",
+      "url": "https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-IQ3_S.gguf",
+      "dest": "LLMs/LLAMACPP_MODELS/Qwen3.6-35B-A3B-UD-IQ3_S.gguf",
+      "check": { "file": "LLMs/LLAMACPP_MODELS/Qwen3.6-35B-A3B-UD-IQ3_S.gguf", "sizeBytes": 13676723168 },
+      "$comment": "ОСНОВНАЯ модель KLAS (интервью 006, 2026-07-17): 35B-A3B поколения 3.6, 98K ctx; цепочки в ядре OpenClaw 6/6 без флейков"
+    },
     "model-qwen3.5-35b": {
       "kind": "url",
       "url": "https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen3.5-35B-A3B-UD-IQ3_S.gguf",
       "dest": "LLMs/LLAMACPP_MODELS/Qwen3.5-35B-A3B-UD-IQ3_S.gguf",
       "check": { "file": "LLMs/LLAMACPP_MODELS/Qwen3.5-35B-A3B-UD-IQ3_S.gguf", "sizeBytes": 13583383168 },
-      "$comment": "ОСНОВНАЯ модель KLAS (интервью 002): универсальная 35B-A3B, 98K ctx (KV q8_0); ядро OpenClaw гоняет её же (5/6 цепочек)"
+      "$comment": "бывшая основная → fallback до обкатки 3.6 (интервью 006 Q2); судьба решается отдельно"
     },
     "model-qwythos-9b": {
       "kind": "url",

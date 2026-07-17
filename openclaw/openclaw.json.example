@@ -7,25 +7,25 @@
         "api": "openai-completions",
         "models": [
           {
+            "id": "qwen3.6-35b-a3b",
+            "name": "Qwen3.6-35B-A3B (KLAS llama-swap, РћРЎРќРћР’РќРђРЇ СЃ 2026-07-17, РёРЅС‚. 006: С†РµРїРѕС‡РєРё OpenClaw 6/6 Р±РµР· С„Р»РµР№РєРѕРІ)",
+            "contextWindow": 98304,
+            "maxTokens": 8192,
+            "input": ["text"],
+            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
+          },
+          {
+            "id": "qwen3.6-35b-a3b-r",
+            "name": "Qwen3.6-35B-A3B retry-alias (С‚РѕС‚ Р¶Рµ РёРЅСЃС‚Р°РЅСЃ llama-swap; fallback в„–1 = СЂРµС‚СЂР°Р№ С‚РѕР№ Р¶Рµ РјРѕРґРµР»Рё РїСЂРё 500 СЃРµСЂРІРµСЂР°)",
+            "contextWindow": 98304,
+            "maxTokens": 8192,
+            "input": ["text"],
+            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
+          },
+          {
             "id": "qwen3.5-35b",
-            "name": "Qwen3.5-35B-A3B (KLAS llama-swap, РѕСЃРЅРѕРІРЅР°СЏ)",
+            "name": "Qwen3.5-35B-A3B (Р±С‹РІС€Р°СЏ РѕСЃРЅРѕРІРЅР°СЏ в†’ fallback РґРѕ РѕР±РєР°С‚РєРё 3.6, РёРЅС‚. 006 Q2; С†РµРїРѕС‡РєРё 5/6)",
             "contextWindow": 98304,
-            "maxTokens": 8192,
-            "input": ["text"],
-            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
-          },
-          {
-            "id": "qwen3.5-35b-r",
-            "name": "Qwen3.5-35B-A3B retry-alias (С‚РѕС‚ Р¶Рµ РёРЅСЃС‚Р°РЅСЃ llama-swap; fallback в„–1 = СЂРµС‚СЂР°Р№ С‚РѕР№ Р¶Рµ РјРѕРґРµР»Рё РїСЂРё С„Р»РµР№РєРѕРІРѕР№ 500 peg-РїР°СЂСЃРµСЂР° С‚СѓР»-РєРѕР»Р»РѕРІ llama.cpp)",
-            "contextWindow": 98304,
-            "maxTokens": 8192,
-            "input": ["text"],
-            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
-          },
-          {
-            "id": "gemma-4-12b",
-            "name": "Gemma 4 12B (KLAS llama-swap, Р·Р°РїР°СЃРЅР°СЏ; РІ С†РµРїРѕС‡РєР°С… СЃР»Р°Р±Р° вЂ” research 09 В§3.4)",
-            "contextWindow": 131072,
             "maxTokens": 8192,
             "input": ["text"],
             "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
@@ -37,8 +37,8 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "klas/qwen3.5-35b",
-        "fallbacks": ["klas/qwen3.5-35b-r", "klas/gemma-4-12b"]
+        "primary": "klas/qwen3.6-35b-a3b",
+        "fallbacks": ["klas/qwen3.6-35b-a3b-r", "klas/qwen3.5-35b"]
       },
       "skills": ["healthcheck", "skill-creator"]
     }
