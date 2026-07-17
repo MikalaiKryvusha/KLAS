@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "marked": "^18.0.5",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "sherpa-onnx-node": "^1.13.4"
   }
 }
