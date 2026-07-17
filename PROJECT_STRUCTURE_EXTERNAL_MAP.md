@@ -36,6 +36,8 @@
 ├── .claude/skills/<name>/SKILL.md       # 19 скиллов-ритуалов (/resume, /pause, циклы, …)
 ├── tools/                               # инструменты проекта (kaif.mjs; сюда же — скрипты харнесса)
 │   └── kaif.mjs                         # реализация npm run kaif:*
+├── openclaw/      # конфиг агентного ядра ассистента (шаблон openclaw.json.example + README;
+│                  #   рабочая копия — ~/.openclaw/openclaw.json, вне git; план — plans/10)
 ├── plans/         # детальные планы шагов (реализация фаз MASTER_PLAN)     + README.md
 ├── ideas/         # предложения фич/улучшений (в основном от владельца)    + README.md
 ├── bugs/          # один документ на дефект                                + README.md

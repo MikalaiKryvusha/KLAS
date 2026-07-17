@@ -1,0 +1,51 @@
+{
+  "models": {
+    "providers": {
+      "klas": {
+        "baseUrl": "http://127.0.0.1:8080/v1",
+        "apiKey": "sk-local-klas",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "qwen3.5-35b",
+            "name": "Qwen3.5-35B-A3B (KLAS llama-swap, основная)",
+            "contextWindow": 98304,
+            "maxTokens": 8192,
+            "input": ["text"],
+            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
+          },
+          {
+            "id": "qwen3.5-35b-r",
+            "name": "Qwen3.5-35B-A3B retry-alias (тот же инстанс llama-swap; fallback №1 = ретрай той же модели при флейковой 500 peg-парсера тул-коллов llama.cpp)",
+            "contextWindow": 98304,
+            "maxTokens": 8192,
+            "input": ["text"],
+            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
+          },
+          {
+            "id": "gemma-4-12b",
+            "name": "Gemma 4 12B (KLAS llama-swap, запасная; в цепочках слаба — research 09 §3.4)",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "input": ["text"],
+            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "klas/qwen3.5-35b",
+        "fallbacks": ["klas/qwen3.5-35b-r", "klas/gemma-4-12b"]
+      }
+    }
+  },
+  "tools": {
+    "exec": {
+      "security": "allowlist",
+      "ask": "off"
+    }
+  }
+}
