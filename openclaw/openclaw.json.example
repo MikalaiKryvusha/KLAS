@@ -49,6 +49,21 @@
       "ask": "off"
     }
   },
+  "messages": {
+    "tts": {
+      "enabled": true,
+      "auto": "off",
+      "provider": "tts-local-cli",
+      "providers": {
+        "tts-local-cli": {
+          "command": "node",
+          "args": ["F:\\KLAS\\tools\\voice-say.mjs", "{{Text}}", "--out", "{{OutputPath}}"],
+          "outputFormat": "wav",
+          "timeoutMs": 120000
+        }
+      }
+    }
+  },
   "gateway": {
     "mode": "local",
     "bind": "tailnet",

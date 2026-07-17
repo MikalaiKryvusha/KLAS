@@ -250,6 +250,33 @@ write; «2/2 воспроизведения» из первого прогона
 > curl.exe — «no model id could be identified» от llama-swap означал битое ТЕЛО запроса, а не
 > проблему алиасов. JSON для curl передавать файлом (`-d "@body.json"`).
 
+#### 🔬 Аудио-архитектура Android-ноды OpenClaw (2026-07-17, шаг 1 плана Г4 — до установки)
+
+По докам ([nodes/talk](https://docs.openclaw.ai/nodes/talk), [tools/tts](https://docs.openclaw.ai/tools/tts))
+и коду v2026.7.1 (`dist/speech-provider*.js`):
+
+- **STT — НА УСТРОЙСТВЕ** («local speech recognition» Android/iOS/macOS): телефон сам распознаёт и
+  шлёт в гейтвей ТЕКСТ. Наш GigaAM на хосте в этот цикл не встаёт (и не нужен для ноды); локаль —
+  `speechLocale: ru-RU`. Приватность ок: в tailnet уходит текст, не звук.
+- **TTS — НА ХОСТЕ через `talk.speak`:** гейтвей резолвит озвучку АКТИВНЫМ TTS-провайдером
+  (`messages.tts.provider`); системный TTS телефона — только fallback при недоступности RPC.
+  Аудио стримится нодой (PCM 16000/22050/24000/44100, AudioTrack).
+- **✅ НАШ ТРАКТ УЖЕ ПОДКЛЮЧЁН (сделано и проверено):** провайдер **`tts-local-cli`** (extension
+  в комплекте ядра; конфиг `messages.tts.providers["tts-local-cli"]`: `command`+`args` с шаблонами
+  `{{Text}}`/`{{OutputPath}}`, `outputFormat: wav`) → зовёт наш `tools/voice-say.mjs` (Silero v5).
+  Смоук: агентный ход «озвучь фразу» → тул `tts` → wav синтезирован нашим трактом (трейс:
+  tts-local-cli активен; попутный exec-поиск файла отбит allowlist'ом — safety работает).
+  ⇒ **Android-нода из коробки заговорит голосом Silero** (а после Г5 — клоном Вихрова/Joi: тот же
+  провайдер, та же точка). В `messages.tts` есть и `personas` — готовый механизм под Jarvis/Joi.
+- **Voice Wake на Android сейчас ОТКЛЮЧЁН апстримом** (тумблеры убраны из UX/runtime; issue
+  [#30447](https://github.com/openclaw/openclaw/issues/30447) — таймлайн обсуждается). Talk Mode =
+  цикл «слушать→сессия→talk.speak» в Voice-вкладке (микрофон on/off руками), фоновый сервис
+  microphone; голос гаснет при уходе приложения из foreground. ⇒ для Г4 старт — кнопка/вкладка,
+  wake word «Jarvis» — ждать апстрим или самим (openWakeWord отдельным слоем — решение позже).
+- **Realtime-режим** (`talk.realtime.*`: webrtc/provider-websocket) заточен под облачных
+  провайдеров (openai/google) — НЕ наш путь (только tailnet/локально); каскадный stt-tts режим —
+  наш дефолт.
+
 ### 3.5 Управление Windows 11
 
 | Проект | ⭐ | Лицензия | Суть |
