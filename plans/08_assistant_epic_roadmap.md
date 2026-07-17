@@ -18,7 +18,8 @@
    │
 Эпик-роадмап ─── plans/08_assistant_epic_roadmap.md   ◄── ВЫ ЗДЕСЬ (секвенс, принципы, «закладки в ядро»)
    │
-Детальные ────── plans/07_jarvis_gateway_and_client.md  (связка хост↔Android, 5 фаз)
+Детальные ────── plans/07 (ЗОНТИК голоса) → фазы Г1–Г5: plans/11 (TTS) · 12 (STT) · 13 (скелет
+                 разговора) · 14 (Android-нода) · 15 (клоны/персоны); ядро — plans/10 (✅ ступени 0–1)
 планы            ideas/psycho_acoustic_interface/pai_plan.md  (PAI, фазы + PAI-тренажёр)
                  plans/09_jarvis_identity_trust.md  (идентичность/доверие/аутентификация/duress, 6 фаз)
    │

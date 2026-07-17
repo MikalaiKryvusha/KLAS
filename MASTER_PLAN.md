@@ -79,9 +79,10 @@
      мини-бенч цепочек + дожим write-дефекта — research 09 §3.4). Выкат ступенями —
      `plans/10_openclaw_core_rollout.md`: ступень 0 ✅ (рабочий профиль, exec-allowlist, гейтвей
      выкл); ступень 1 (гейтвей в tailnet + подтверждения) — следующая, через `/interview`.
-  2. **Голосовой тракт (русский):** каркас Pipecat; STT sherpa-onnx + GigaAM-v3; TTS-старт Silero v5,
-     затем слепой A/B клонов (CosyVoice 3 / Chatterbox V3 / F5-TTS_RUSSIAN) на сэмплах владельца —
-     `plans/07_jarvis_gateway_and_client.md` (Jarvis Gateway поверх Tailscale, голос только tailnet).
+  2. **Голосовой тракт (русский), нарезан на фазы Г1–Г5 (2026-07-17):** Г1 голос Silero v5
+     (`plans/11`) → Г2 уши GigaAM-v3 (`plans/12`) → Г3 скелет разговора с ядром (`plans/13`) →
+     Г4 Android-нода в tailnet (`plans/14`) → Г5 клоны+персоны (`plans/15`). Зонтик-архитектура —
+     `plans/07`; голос только tailnet; Pipecat подключается на Г4/Г5, когда докажет необходимость.
   3. **Клиент следует за ядром** (Q2 инт. 004): OpenClaw-бекенд → его Android-нода; иначе — форк HA
      Companion (инт. 003 Q4).
   4. **Полномочия над Windows — ступенчато с allow-list** (Q4 инт. 004): Windows-MCP (UIA-дерево
