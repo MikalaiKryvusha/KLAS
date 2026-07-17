@@ -12,12 +12,19 @@
       "dest": "llamacpp",
       "check": { "file": "llamacpp/llama-server.exe" }
     },
+    "model-qwen3.5-35b": {
+      "kind": "url",
+      "url": "https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF/resolve/main/Qwen3.5-35B-A3B-UD-IQ3_S.gguf",
+      "dest": "LLMs/LLAMACPP_MODELS/Qwen3.5-35B-A3B-UD-IQ3_S.gguf",
+      "check": { "file": "LLMs/LLAMACPP_MODELS/Qwen3.5-35B-A3B-UD-IQ3_S.gguf", "sizeBytes": 13583383168 },
+      "$comment": "ОСНОВНАЯ модель KLAS (интервью 002): универсальная 35B-A3B, 98K ctx (KV q8_0); ядро OpenClaw гоняет её же (5/6 цепочек)"
+    },
     "model-qwythos-9b": {
       "kind": "url",
       "url": "https://huggingface.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF/resolve/main/Qwythos-9B-Claude-Mythos-5-1M-Q5_K_M.gguf",
       "dest": "LLMs/LLAMACPP_MODELS/Qwythos-9B-Claude-Mythos-5-1M-Q5_K_M.gguf",
       "check": { "file": "LLMs/LLAMACPP_MODELS/Qwythos-9B-Claude-Mythos-5-1M-Q5_K_M.gguf", "sizeBytes": 6467969952 },
-      "$comment": "ОСНОВНАЯ модель KLAS (идея 07): 256K контекста на 16 ГБ, agent-bench 6/6"
+      "$comment": "спец long-context (идея 07): 256K на 16 ГБ, needle 148K"
     },
     "model-gemma-4-12b": {
       "kind": "url",
@@ -37,6 +44,41 @@
       "file": "docker-compose.yml",
       "optional": true,
       "check": { "command": "docker compose -f docker-compose.yml config -q" }
+    },
+    "openclaw": {
+      "kind": "npm",
+      "package": "openclaw",
+      "check": { "command": "openclaw --version" },
+      "$comment": "агентное ядро ассистента (решение владельца 2026-07-17, plans/10); конфиг после установки — из openclaw/openclaw.json.example → ~/.openclaw/openclaw.json (токен свой!)"
+    },
+    "voice-venv": {
+      "kind": "commands",
+      "commands": [
+        ["python", "-m", "venv", "voice/venv"],
+        ["voice/venv/Scripts/python.exe", "-m", "pip", "install", "-r", "tools/voice/requirements.txt", "--index-url", "https://download.pytorch.org/whl/cpu", "--extra-index-url", "https://pypi.org/simple", "--quiet"]
+      ],
+      "check": { "file": "voice/venv/Scripts/python.exe" },
+      "$comment": "python-сайдкар голосового тракта (Г1, plans/11): torch CPU + numpy + scipy"
+    },
+    "voice-silero-v5": {
+      "kind": "url",
+      "url": "https://models.silero.ai/models/tts/ru/v5_ru.pt",
+      "dest": "voice/models/v5_ru.pt",
+      "check": { "file": "voice/models/v5_ru.pt", "sizeBytes": 145382211 },
+      "$comment": "русский TTS (Г1): «рот» KLAS — tools/voice-say.mjs; он же TTS-провайдер ядра OpenClaw (tts-local-cli)"
+    },
+    "voice-gigaam-onnx": {
+      "kind": "url",
+      "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16/resolve/main/model.int8.onnx",
+      "dest": "voice/models/gigaam-v3-ctc/model.int8.onnx",
+      "check": { "file": "voice/models/gigaam-v3-ctc/model.int8.onnx", "sizeBytes": 224721476 },
+      "$comment": "русский STT (Г2): «уши» KLAS — tools/voice-hear.mjs (sherpa-onnx-node из npm dev-deps)"
+    },
+    "voice-gigaam-tokens": {
+      "kind": "url",
+      "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16/resolve/main/tokens.txt",
+      "dest": "voice/models/gigaam-v3-ctc/tokens.txt",
+      "check": { "file": "voice/models/gigaam-v3-ctc/tokens.txt", "sizeBytes": 196 }
     }
   },
   "$todo": [

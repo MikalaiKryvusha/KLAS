@@ -13,6 +13,8 @@
 //   url            — прямое скачивание файла (докачка .part + проверка sha256)
 //   winget         — установка пакета через winget
 //   compose        — docker compose up -d (optional: пропускается без docker с предупреждением)
+//   npm            — глобальный npm-пакет (npm install -g <package>)
+//   commands       — последовательность команд из корня KLAS (venv и т.п.); идемпотентность — через check
 
 import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, renameSync, rmSync, createReadStream } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -105,6 +107,19 @@ const handlers = {
     if (!APPLY) return;
     execFileSync('docker', ['compose', '-f', join(ROOT, item.file), 'up', '-d'], { stdio: 'inherit' });
   },
+  async npm(item) {
+    act(`npm install -g ${item.package}`);
+    if (!APPLY) return;
+    execFileSync('npm', ['install', '-g', item.package], { stdio: 'inherit', shell: true }); // npm = .cmd на Windows
+  },
+  async commands(item) {
+    for (const [cmd, ...args] of item.commands) {
+      act(`${cmd} ${args.join(' ')}`);
+      if (!APPLY) continue;
+      const exe = existsSync(join(ROOT, cmd)) ? join(ROOT, cmd) : cmd;   // пути внутри KLAS — от корня, остальное — из PATH
+      execFileSync(exe, args, { cwd: ROOT, stdio: 'inherit' });
+    }
+  },
 };
 
 // ── 1. Предпроверки ────────────────────────────────────────────────────────
@@ -159,5 +174,13 @@ console.log(`\n═══ Итог ═══`);
 console.log(`на месте: [${summary.ok}] · установлено: [${summary.done}] · к установке/пропущено: [${summary.skipped}] · провалено: [${summary.failed}]`);
 for (const w of warnings) console.log(`⚠ ${w}`);
 if (!APPLY) console.log('\nЕсли план устраивает: node tools/deploy.mjs --apply');
-else console.log('\nПроверка стека: powershell -File tools/health-check.ps1, затем запуск llama-swap (см. llama-swap/config.yaml)');
+else {
+  // Пост-настройка (план 02, хвост): финальная проверка стека одной командой + напоминания владельцу.
+  console.log('\n— финальный health-check —');
+  try { execFileSync('powershell', ['-NoProfile', '-File', join(ROOT, 'tools', 'health-check.ps1')], { stdio: 'inherit' }); }
+  catch { console.log('⚠ health-check сообщил о проблемах (нормально, если llama-swap ещё не запущен)'); }
+  console.log('\nДальше руками владельца (persistence агент не создаёт):');
+  console.log('  автозапуск стека: powershell -File tools\\install-autostart.ps1');
+  console.log('  конфиг ядра OpenClaw: openclaw\\openclaw.json.example → ~\\.openclaw\\openclaw.json (свой токен!)');
+}
 if (summary.failed.length) process.exit(1);
