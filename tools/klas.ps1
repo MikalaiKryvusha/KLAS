@@ -19,6 +19,9 @@ $Panel      = 'http://localhost/'                   # пульт через Cadd
 $IconPath   = 'F:\KLAS\logo\homepage.ico'           # иконка «Кот Криник» для трея и уведомлений
 $LlamaVbs   = 'F:\KLAS\llama-swap\start-hidden.vbs' # тихий запуск LLM-менеджера llama-swap (баг 02)
 $WebuiLocal = 'http://127.0.0.1:3080'               # Open WebUI (локально) — цель отдельного funnel-порта
+# OpenClaw — агентное ядро ассистента (ступень 1, plans/10 + интервью 005): гейтвей строго в tailnet
+# (bind tailnet в ~/.openclaw/openclaw.json), auth token — в caddy/PASSWORD.local.txt. НЕ funnel!
+$OpenclawJs = "$env:APPDATA\npm\node_modules\openclaw\openclaw.mjs"   # энтрипоинт (npm -g)
 
 # Поднять весь стек KLAS. Идемпотентно (docker up -d и funnel --bg безопасно вызывать повторно).
 function Start-KlasStack {
@@ -33,6 +36,12 @@ function Start-KlasStack {
     #    :8443 → Open WebUI напрямую (root-приложение, под подпутём не живёт; своя авторизация).
     try { & tailscale funnel --bg 443 2>&1 | Out-Null } catch {}
     try { & tailscale funnel --bg --https=8443 $WebuiLocal 2>&1 | Out-Null } catch {}
+    # 4) гейтвей OpenClaw (ядро ассистента) — тихо, без окна; слушает ТОЛЬКО tailnet-интерфейс
+    #    (100.x:18789, конфиг openclaw.json), в funnel НЕ публикуется. Идемпотентно: не плодим второй.
+    if ((Test-Path $OpenclawJs) -and -not (Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+            Where-Object { $_.CommandLine -match 'openclaw.*gateway\s+run' })) {
+        Start-Process node -ArgumentList "`"$OpenclawJs`"",'gateway','run' -WindowStyle Hidden
+    }
 }
 
 # Остановить весь стек KLAS: закрыть внешний доступ, погасить контейнеры и LLM.
@@ -43,6 +52,10 @@ function Stop-KlasStack {
     try { & docker compose -f $Compose stop 2>&1 | Out-Null } catch {}
     # 3) LLM-менеджер и его дочерние llama-server
     Get-Process llama-swap,llama-server -ErrorAction SilentlyContinue | Stop-Process -Force
+    # 4) гейтвей OpenClaw (node ... gateway run) — гасим только ЕГО node-процесс, не чужие node
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+        Where-Object { $_.CommandLine -match 'openclaw.*gateway\s+run' } |
+        ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -Confirm:$false } catch {} }
 }
 
 switch ($Action) {
