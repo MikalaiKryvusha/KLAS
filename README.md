@@ -52,8 +52,11 @@ Wikipedia, searchable from the chat).
 |-----------|----------------|------|
 | Inference engine | [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`, CUDA) | the LLM on your GPU |
 | Model manager | [llama-swap](https://github.com/mostlygeek/llama-swap) — "sleeps until called" | auto load/unload on demand; web UI at `/ui/` |
-| Main model | **Qwythos-9B** (Q5_K_M) — **256K context** | the brain (agent-bench 6/6, needle @148K ✅) |
-| Alt models | Qwen3.5-35B-A3B (MoE, 98K), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), Gemma-4-12B (131K, multimodal) | swapped by name |
+| Main model | **Qwen3.6-35B-A3B** (MoE, UD-IQ3_S, 98K context) | the brain — chosen for intelligence over speed (~164 t/s is already plenty) |
+| Long-context specialist | Qwythos-9B (Q5_K_M) — **256K context** | needle @148K ✅ — for very long documents |
+| Alt models | Qwen3.5-35B-A3B (fallback), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), Gemma-4-12B (131K, multimodal) | swapped by name |
+| Assistant core | [OpenClaw](https://github.com/openclaw/openclaw) on the local models | the agent loop behind the assistant: skills, tool calls, sessions |
+| Voice (in progress) | [Silero v5](https://github.com/snakers4/silero-models) TTS + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT via sherpa-onnx — fully offline, on CPU | KLAS speaks and hears in Russian; live mic dialogue works, voice choice pending |
 | Agent frontend | Zoo Code (VS Code) — local & remote | the agent in your editor |
 | Family chat | [Open WebUI](https://github.com/open-webui/open-webui) — personal accounts, private chats | a simple ChatGPT-like chat for close ones |
 | Knowledge base | kiwix (offline Wikipedia + more `.zim`) with search from chat & from the agent (MCP) | offline knowledge for people and agents |
@@ -93,7 +96,7 @@ the repository — they are pulled at install time.
 - **Chat for close ones** — Open WebUI, with personal accounts and private chats; the model can search
   the local Wikipedia via a built-in Kiwix tool.
 - **Remote API** (Zoo Code / any OpenAI client): Base URL `https://<your-machine>.ts.net/llm/v1`,
-  Bearer key from `caddy/PASSWORD.local.txt`, model `qwythos-9b` (or an alt by name).
+  Bearer key from `caddy/PASSWORD.local.txt`, model `qwen3.6-35b-a3b` (or another by name).
 
 ### Roadmap
 
@@ -106,14 +109,18 @@ the repository — they are pulled at install time.
 | Control panel & knowledge | dashboard, offline wiki, search from chat & agent | ✅ |
 | Universal deploy | smart multilingual installer-wizard, turnkey | ✅ |
 | Daily driver | everyday use, access for close ones | 🔧 |
-| Jarvis | humanlike voice assistant, screen vision, Windows control | 🔲 |
+| Jarvis | humanlike voice assistant, screen vision, Windows control | 🔧 |
+
+Jarvis is underway, not done: the assistant core is chosen and running on the local models, and the
+Russian voice pipeline speaks, hears and holds a dialogue offline. Still ahead — the Android node,
+voice authentication, and Windows control.
 
 ### Managed by KAIF
 
 Development runs as a human-visionary + AI-agent tandem on the
-**[KAIF](https://github.com/MikalaiKryvusha/KAIF)** framework. **KLAS ≠ KAIF:** KAIF is an auxiliary
-dev framework deployed locally to help build KLAS — for KLAS it is a 3rd-party tool and is **not**
-vendored into this repository.
+**[KAIF](https://github.com/MikalaiKryvusha/KAIF)** framework (**v1.6**). **KLAS ≠ KAIF:** KAIF is an
+auxiliary dev framework deployed locally to help build KLAS — for KLAS it is a 3rd-party tool and is
+**not** vendored into this repository.
 
 ---
 
@@ -150,8 +157,11 @@ LLM работает на геймерской видеокарте; автон�
 |-----------|------------|------|
 | Движок инференса | [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`, CUDA) | LLM на вашей GPU |
 | Менеджер моделей | [llama-swap](https://github.com/mostlygeek/llama-swap) — «спит, пока не позовут» | автозагрузка/выгрузка по запросу; веб-UI на `/ui/` |
-| Основная модель | **Qwythos-9B** (Q5_K_M) — **256K контекста** | «мозг» (agent-bench 6/6, needle @148K ✅) |
-| Запасные модели | Qwen3.5-35B-A3B (MoE, 98K), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), Gemma-4-12B (131K, мультимодальная) | свопятся по имени |
+| Основная модель | **Qwen3.6-35B-A3B** (MoE, UD-IQ3_S, 98K контекста) | «мозг» — выбрана за УМ, а не за скорость (~164 t/s уже за глаза) |
+| Спец по длинному контексту | Qwythos-9B (Q5_K_M) — **256K контекста** | needle @148K ✅ — для очень длинных документов |
+| Запасные модели | Qwen3.5-35B-A3B (fallback), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), Gemma-4-12B (131K, мультимодальная) | свопятся по имени |
+| Ядро ассистента | [OpenClaw](https://github.com/openclaw/openclaw) на локальных моделях | агентный цикл ассистента: навыки, тул-коллы, сессии |
+| Голос (в работе) | [Silero v5](https://github.com/snakers4/silero-models) TTS + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT через sherpa-onnx — полностью офлайн, на CPU | KLAS говорит и слышит по-русски; живой микрофонный диалог работает, выбор голоса за владельцем |
 | Агентский фронтенд | Zoo Code (VS Code) — локально и удалённо | агент в редакторе |
 | Чат для родных | [Open WebUI](https://github.com/open-webui/open-webui) — личные аккаунты, приватные чаты | простой ChatGPT-подобный чат близким |
 | База знаний | kiwix (оффлайн-Википедия и другие `.zim`) с поиском из чата и от агента (MCP) | оффлайн-знания людям и агентам |
@@ -192,7 +202,7 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # копия без ав
 - **Чат для родных** — Open WebUI: личные аккаунты и приватные чаты; модель умеет искать по локальной
   Википедии встроенным инструментом Kiwix.
 - **Удалённый API** (Zoo Code / любой OpenAI-клиент): Base URL `https://<ваша-машина>.ts.net/llm/v1`,
-  Bearer-ключ из `caddy/PASSWORD.local.txt`, модель `qwythos-9b` (или запасная по имени).
+  Bearer-ключ из `caddy/PASSWORD.local.txt`, модель `qwen3.6-35b-a3b` (или другая по имени).
 
 ### Дорожная карта
 
@@ -205,12 +215,16 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # копия без ав
 | Пульт и знания | дашборд, оффлайн-вики, поиск из чата и от агента | ✅ |
 | Универсальное развёртывание | умный мультиязычный мастер-установщик под ключ | ✅ |
 | Ежедневная работа | повседневное использование, доступ близким | 🔧 |
-| Jarvis | человекоподобный голосовой ассистент, зрение экрана, управление Windows | 🔲 |
+| Jarvis | человекоподобный голосовой ассистент, зрение экрана, управление Windows | 🔧 |
+
+Jarvis в работе, а не готов: ядро ассистента выбрано и запущено на локальных моделях, русский голосовой
+тракт говорит, слышит и держит диалог офлайн. Впереди — Android-нода, голосовая аутентификация и
+управление Windows.
 
 ### Управляется через KAIF
 
 Разработкой рулит тандем «человек-визионер + ИИ-агент» на фреймворке
-**[KAIF](https://github.com/MikalaiKryvusha/KAIF)**. **KLAS ≠ KAIF:** KAIF — вспомогательный
+**[KAIF](https://github.com/MikalaiKryvusha/KAIF)** (**v1.6**). **KLAS ≠ KAIF:** KAIF — вспомогательный
 dev-фреймворк, развёрнутый локально в помощь разработке KLAS; для KLAS он 3rd-party-инструмент и в
 этот репозиторий **не** упаковывается.
 

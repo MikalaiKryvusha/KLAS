@@ -115,7 +115,11 @@ if (existsSync(pkg)) {
     writeFileSync(pkg, JSON.stringify(j, null, 2) + '\n');
   }
 }
-// tools/kaif.mjs: убрать origin-скиллы из валидатора (иначе kaif:check упадёт)
+// tools/kaif.mjs: убрать origin-скиллы из валидатора (иначе kaif:check упадёт).
+// ⚠️ Устарело с обновления KAIF до 1.6 (2026-07-26): валидатор переехал в .kaif/kaif-core.mjs, который
+// умеет анонимность сам (пропускает origin-скиллы при tracking=anonymous и грепает дерево на утечки
+// идентичности). Файла tools/kaif.mjs больше нет — блок ниже безопасно вырождается в no-op благодаря
+// existsSync. Оставлен для проектов/копий, где старый файл ещё лежит на диске.
 const kaifjs = join(ROOT, 'tools', 'kaif.mjs');
 if (existsSync(kaifjs)) {
   const before = readFileSync(kaifjs, 'utf8');

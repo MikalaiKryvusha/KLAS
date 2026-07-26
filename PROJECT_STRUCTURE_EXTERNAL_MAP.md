@@ -31,11 +31,14 @@
 ├── README.md                            # витрина репозитория: бейджи, логотип, дорожная карта
 ├── LICENSE                              # MIT (© 2026 Mikalai Kryvusha) — выбор владельца
 ├── logo/                                # бренд-ассеты: KLAS.jpg (OG 1200×630, hero README), исходники
-├── package.json                         # kaif:* handles (npm run kaif:version / kaif:check / …)
-├── .kaif/kaif.json                      # маркер деплоя KAIF: версия, сфера, агент, tracking
-├── .claude/skills/<name>/SKILL.md       # 19 скиллов-ритуалов (/resume, /pause, циклы, …)
-├── tools/                               # инструменты проекта (kaif.mjs; сюда же — скрипты харнесса)
-│   └── kaif.mjs                         # реализация npm run kaif:*
+├── package.json                         # kaif:* handles (npm run kaif:version / kaif:check / kaif:update)
+├── .kaif/kaif.json                      # маркер деплоя KAIF: версия, сфера, язык, агент-системы, tracking
+├── .kaif/kaif-core.mjs                  # машинерия KAIF 1.6 — реализация npm run kaif:* (заменила tools/kaif.mjs)
+├── .kaif/deploy-manifest.json           # sha256-слепки развёрнутых файлов (по ним update отличает нетронутое от разошедшегося)
+├── .kaif/spheres/                       # библиотеки сфер (терминология + дисциплина исполнения домена)
+├── .claude/skills/<name>/SKILL.md       # 26 скиллов-ритуалов (/resume, /pause, циклы, fable-*, /experience)
+├── .roo/ .agents/ .grok/ .cline/        # те же скиллы для Zoo Code / Codex / Grok Build / Cline (копии канона)
+├── tools/                               # инструменты проекта и скрипты харнесса
 ├── openclaw/      # конфиг агентного ядра ассистента (шаблон openclaw.json.example + README;
 │                  #   рабочая копия — ~/.openclaw/openclaw.json, вне git; план — plans/10)
 ├── plans/         # детальные планы шагов (реализация фаз MASTER_PLAN)     + README.md
