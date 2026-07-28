@@ -12,7 +12,7 @@
             "contextWindow": 98304,
             "maxTokens": 8192,
             "input": ["text"],
-            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
+            "compat": { "unsupportedToolSchemaKeywords": ["pattern", "maxLength", "minLength", "maxItems", "minItems"] }
           },
           {
             "id": "qwen3.6-35b-a3b-r",
@@ -20,7 +20,7 @@
             "contextWindow": 98304,
             "maxTokens": 8192,
             "input": ["text"],
-            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
+            "compat": { "unsupportedToolSchemaKeywords": ["pattern", "maxLength", "minLength", "maxItems", "minItems"] }
           },
           {
             "id": "qwen3.5-35b",
@@ -28,7 +28,7 @@
             "contextWindow": 98304,
             "maxTokens": 8192,
             "input": ["text"],
-            "compat": { "unsupportedToolSchemaKeywords": ["pattern"] }
+            "compat": { "unsupportedToolSchemaKeywords": ["pattern", "maxLength", "minLength", "maxItems", "minItems"] }
           }
         ]
       }
