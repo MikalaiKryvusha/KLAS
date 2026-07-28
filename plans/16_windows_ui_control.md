@@ -7,8 +7,35 @@
 > в [интервью 004 Q4 = A](../interviews/interview_004_oss_constructor.md) — *ступенчато, allow-list*.
 > Канон OSS — [researches/09 §3.5](../researches/09_oss_constructor_map.md).
 >
-> **Статус (2026-07-18): 🔧 Фазы 1–3 ВЫПОЛНЕНЫ и ПРОВЕРЕНЫ (без единого действия на рабочем столе).
-> Фаза 4 (живой UI-тест) ЖДЁТ «go» владельца.** Тег `DONE` не ставить (тест не пройден).
+> **Статус (2026-07-28): 🔧 Фазы 1–3 ВЫПОЛНЕНЫ и ПРОВЕРЕНЫ. Фаза 4 ПРОГНАНА ЖИВЬЁМ (4 прогона по «go»
+> владельца) — ядро UI работает частично, упирается в дефект движка, не в Windows-MCP.** Тег `DONE` не
+> ставить.
+>
+> **Что доказано живым прогоном 2026-07-28:**
+> - ✅ **Работают:** `App launch_executable` (Блокнот реально открылся — подтверждено владельцем),
+>   `Wait`, `WaitFor`, `Snapshot` (UIA-дерево читается, элементы по-русски), адресация по UIA —
+>   модель верно определила label области редактирования (**475**).
+> - ❌ **Не доходит до действия:** ход умирает на ПЕРВОМ действующем тул-колле (`Type`/`Click`) —
+>   модель отдаёт XML-формат `<tool_call><function=windows__Type><parameter=…>`, а peg-парсер
+>   llama.cpp b9538 его не принимает. **2/2 воспроизводимо, на всех трёх моделях цепочки** — это не
+>   9%-флейк из EXP-0003, а систематика на MCP-инструментах.
+> - 🔎 **Корень найден:** апстрим [llama.cpp#24807](https://github.com/ggml-org/llama.cpp/issues/24807)
+>   (ровно наша модель и симптом) закрыт 21.06.2026, рабочий билд — **после b9754**; наш движок был
+>   собран 06.06.2026 (**b9538**), то есть старше фикса. Обновление на свежий **b10167 не подошло** —
+>   он ломает грамматику тул-коллов вообще (`bugs/05`), откачены обратно на b9538.
+> - ⛔ **Блокер фазы 4:** нужен билд llama.cpp между b9760 и b10167 (бисекция — в `bugs/05`). До этого
+>   живой тест дальше `Snapshot` не пройдёт.
+>
+> **Две поправки к канону этого плана (оплачены прогоном):**
+> 1. **В команде фазы 4 НЕЛЬЗЯ передавать `--model`** — явный флаг выключает цепочку fallback целиком
+>    (`modelOverrideSource: "user"` → пустой список, исходники OpenClaw 2026.7.1). Именно поэтому
+>    ретрай-алиас `qwen3.6-35b-a3b-r` не срабатывал ни разу. Без флага цепочка отрабатывает честно:
+>    `qwen3.6 → qwen3.6-r → qwen3.5`. Подробности — `EXPERIENCE.md` EXP-0005.
+> 2. **Одобрений на действие при `agent --local` НЕТ** — `plugin_approval_requested` живёт в Control UI
+>    гейтвея, а `--local` его не поднимает. На локальных прогонах защита = allow-list 7 тулов + присмотр.
+> 3. **Понизить права из административной сессии не удалось** (ни `explorer.exe`, ни COM `ShellExecute`) —
+>    все 4 прогона шли с админскими правами, вопреки пункту 4 «честных оговорок». Лечится средой: не
+>    держать VS Code запущенным от администратора. Подробности — EXP-0007.
 >
 > **Что реально сделано и проверено:**
 > - **uv** поставлен как standalone-бинарь `F:\KLAS\mcp\uv\uv.exe` (v0.11.29, скачан из GitHub-релиза; pip
@@ -135,12 +162,17 @@ openclaw sandbox explain                 # эффективные allow/deny д�
 openclaw mcp reload                      # сбросить кэш MCP в текущем процессе (гейтвею — свой рестарт)
 ```
 
-### Фаза 4 — 🔴 ЖИВОЙ ТЕСТ (ТОЛЬКО по «go» владельца, комп свободен, под присмотром, с одобрением)
+### Фаза 4 — 🔴 ЖИВОЙ ТЕСТ (ТОЛЬКО по «go» владельца, комп свободен, под присмотром)
 ```powershell
-# Блокнот по пути exe (локаль ru-RU) → набрать → кликнуть кнопку по UIA-label. Клик-таргет выбирается
-# ЖИВЬЁМ из Snapshot, не хардкодом. <qwen-alias> — взять из конфига (llama-swap ⭐/r-примари qwen3.6-35b).
-openclaw agent --local --model <qwen-alias> --thinking medium -m "Use ONLY the windows MCP tools. (1) App launch_executable executable=C:\Windows\System32\notepad.exe (2) WaitFor active_window window_name=Notepad timeout=15 (3) Snapshot use_ui_tree=true, read interactive elements (4) Type text='Hello from KLAS via UIA' into the editor BY ITS label (never guess loc) (5) Snapshot again, find a benign button by name and Click it by its integer label (6) report labels used."
+# ⚠️ БЕЗ --model: явный флаг выключает цепочку fallback (EXP-0005). Модель берётся primary из конфига.
+# ⚠️ Окно Блокнота на русской Windows называется «Блокнот» — фаззи-switch по имени "Notepad"
+#    уводит в Notepad++ (проверено 2026-07-28). Запуск — строго по пути .exe.
+# ⚠️ Числа в скобках вида (659,2100) — ЭКРАННЫЕ КООРДИНАТЫ, а не label; модель их путает, это надо
+#    сказать в промпте явно (без этой строки прогон падает на «Label 659 out of range»).
+openclaw agent --local --session-key uia-test -m "Use ONLY the windows MCP tools. This Windows is Russian: the Notepad window is titled Блокнот. Rule A: numbers in parentheses like (659,2100) are SCREEN COORDINATES, never labels. A label is the small integer index printed for an interactive element. Rule B: never switch to any application whose name contains ++ or Code or Visual. Step 1. App with mode launch_executable and executable C:\Windows\System32\notepad.exe . Step 2. WaitFor with mode active_window and window_name Блокнот and timeout 15. Step 3. Snapshot with use_ui_tree true. Step 4. Type with the integer label of the editing area and text KLAS UIA test. Step 5. Snapshot again and report the labels used."
 ```
+> Прогон 2026-07-28 доходит до шага 4 и падает на дефекте грамматики движка (`bugs/05`). Повторять
+> ПОСЛЕ смены билда llama.cpp — тогда же снимать статус фазы.
 
 ## Альтернатива (если захотим «тихий» режим без перехвата курсора)
 Свой мини-MCP (~150–250 строк, Python + `uiautomation`/pywinauto + `fastmcp`, stdio — проводка в OpenClaw
