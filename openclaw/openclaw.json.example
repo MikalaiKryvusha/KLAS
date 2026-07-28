@@ -74,6 +74,13 @@
     },
     "controlUi": {
       "enabled": true
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": true
+        }
+      }
     }
   }
 }
