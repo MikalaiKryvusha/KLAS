@@ -26,6 +26,17 @@ const voice = flag('--voice') ?? 'aidar';
 
 if (!existsSync(PY)) { console.error(`Нет venv голосового тракта: ${PY} — см. plans/11`); process.exit(1); }
 
+// Охранник кириллицы (bugs/06) [TESTED: 2026-07-28 · «56», «56.», «OK.» роняли сайдкар ValueError;
+// «Ответ: 56.», «42 плюс 14.», «Минск.» синтезируются штатно]. Препроцессор Silero v5 ru требует в
+// тексте хотя бы одну РУССКУЮ букву: на чистых цифрах и на латинице он кидает ValueError, а тот
+// убивал ВЕСЬ голосовой ход (ядро ответило «56.» — диалог умер). Отдельный код выхода 2 позволяет
+// вызывающему (voice-talk) отличить «нечего произносить» от настоящей поломки РТА.
+const HAS_CYRILLIC = /[а-яёА-ЯЁ]/;
+if (!HAS_CYRILLIC.test(text)) {
+  console.error(`Нечего произносить: в тексте нет русских букв («${text}»). Silero v5 ru озвучивает цифры и латиницу только вместе с кириллицей — см. bugs/06.`);
+  process.exit(2);
+}
+
 const r = spawnSync(PY, [SIDE, text, out, voice], { encoding: 'utf8', timeout: 600_000, windowsHide: true });
 // Тайминги сайдкар печатает JSON-строками в stderr; последняя stage:done — итог
 const lines = (r.stderr || '').trim().split(/\r?\n/).filter(Boolean);

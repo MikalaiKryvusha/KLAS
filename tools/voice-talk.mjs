@@ -48,9 +48,13 @@ function think(text) {
   return { text: (j.payloads?.[0]?.text || '').trim(), ms: j.meta?.durationMs ?? 0 };
 }
 
+// Возвращает true, если ответ реально озвучен. Код 2 от РТА = «нечего произносить» (в ответе нет
+// русских букв, bugs/06) — это НЕ поломка: ход обязан выжить и показать текст, а не падать стеком.
 function say(text, outWav) {
   const r = run('node', [path.join(HERE, 'voice-say.mjs'), text, '--out', outWav]);
+  if (r.status === 2) { console.log('(не озвучено: в ответе нет русских букв — bugs/06)'); return false; }
   if (r.status !== 0) throw new Error(`РОТ упал: ${(r.stderr || '').slice(-200)}`);
+  return true;
 }
 
 function playWav(wav) {
@@ -83,10 +87,10 @@ async function turn(wav) {
   const t2 = performance.now();
   console.log(`🤖 KLAS: ${reply}`);
   const replyWav = path.join(OUT_DIR, `talk-reply-${Date.now()}.wav`);
-  say(reply, replyWav);
+  const spoken = say(reply, replyWav);
   const t3 = performance.now();
   console.log(`[тайминги] уши ${((t1 - t0) / 1000).toFixed(1)} с · ядро ${(coreMs / 1000).toFixed(1)} с · рот ${((t3 - t2) / 1000).toFixed(1)} с · всего ${((t3 - t0) / 1000).toFixed(1)} с`);
-  if (play) playWav(replyWav);
+  if (play && spoken) playWav(replyWav);
   return replyWav;
 }
 

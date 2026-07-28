@@ -26,6 +26,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -65,7 +66,12 @@ const PROMPT_HELLO = 'привет';
 // Поправка 2026-07-28: у нового Блокнота Windows 11 область ввода НЕ отдаётся в UIA (нет метки) —
 // проверено живым прогоном. Поэтому шаг 4 идёт вторым путём тула Type: `loc` = координаты внутри
 // клиентской области окна (Type принимает либо label, либо loc — см. Windows-MCP tools/input.py).
-const PROMPT_UI = 'Use ONLY the windows MCP tools. This Windows is Russian: the Notepad window is titled Блокнот. Rule A: numbers in parentheses like (659,2100) are SCREEN COORDINATES, never labels. Rule B: never switch to any application whose name contains ++ or Code or Visual. Step 1. App with mode launch_executable and executable C:\\Windows\\System32\\notepad.exe . Step 2. Wait 3 seconds, then Snapshot with use_ui_tree true and find the Notepad window bounding box. Step 3. Type the text KLAS UIA test into the Notepad editing area. The modern Notepad does NOT expose its editing area in the UI tree, so do NOT look for a label: call Type with the loc parameter set to screen coordinates near the centre of the Notepad window client area (below the toolbar), for example loc [x, y] where x is the horizontal centre of the window and y is about 150 pixels below the toolbar. Step 4. Take a Screenshot and report whether the text KLAS UIA test is visible in the Notepad window, plus the exact loc you typed at.';
+// Поправка 2026-07-28 (вечер): печатаемый текст несёт УНИКАЛЬНЫЙ токен прогона. Без него тест мог
+// пройти по НЕВЕРНОЙ причине: Блокнот Windows 11 хранит несохранённую вкладку между запусками, и в
+// редакторе уже лежал текст от прошлого прогона — «KLAS UIA test на экране» выполнялось само собой.
+// Токен же сверяется машинно (см. notepadTitles) — по состоянию ОС, а не по самоотчёту модели.
+const uiToken = () => `K${randomBytes(3).toString('hex').toUpperCase()}`;
+const promptUi = (token) => `Use ONLY the windows MCP tools. This Windows is Russian: the Notepad window is titled Блокнот. Rule A: numbers in parentheses like (659,2100) are SCREEN COORDINATES, never labels. Rule B: never switch to any application whose name contains ++ or Code or Visual. Step 1. App with mode launch_executable and executable C:\\Windows\\System32\\notepad.exe . Step 2. Wait 3 seconds, then Snapshot with use_ui_tree true and find the Notepad window bounding box. Step 3. Type the text KLAS UIA ${token} into the Notepad editing area. The editor may already contain leftover text from an earlier run — that is fine, just append. The modern Notepad does NOT expose its editing area in the UI tree, so do NOT look for a label: call Type with the loc parameter set to screen coordinates near the centre of the Notepad window client area (below the toolbar), for example loc [x, y] where x is the horizontal centre of the window and y is about 150 pixels below the toolbar. Step 4. Take a Screenshot and report whether the text KLAS UIA ${token} is visible in the Notepad window, plus the exact loc you typed at.`;
 
 const log = (...a) => console.log(...a);
 
@@ -154,6 +160,18 @@ function killTree(pid) {
   if (pid) run('taskkill', ['/PID', String(pid), '/T', '/F']);
 }
 
+/**
+ * Машинная сверка результата UI-теста: заголовки всех окон Блокнота.
+ * Windows держит в заголовке имя вкладки, а для несохранённой вкладки оно берётся из её содержимого,
+ * — значит напечатанный текст виден из ОС. Судим по нему, а НЕ по самоотчёту модели: модель охотно
+ * рапортует «SUCCESS» (EXP-0010), и ровно так тест однажды «прошёл» на чужом тексте.
+ */
+function notepadTitles() {
+  const r = run('powershell', ['-NoProfile', '-Command',
+    "(Get-Process notepad -ErrorAction SilentlyContinue | ForEach-Object { $_.MainWindowTitle }) -join ' | '"]);
+  return (r.out || '').trim();
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const tag = args.find((a) => /^b\d+$/.test(a));
@@ -188,7 +206,9 @@ async function main() {
     log(`✔  модель загружена за ${((Date.now() - t0) / 1000).toFixed(0)} с`);
 
     prevUrl = setBaseUrl(STAND_BASE_URL);
-    const turn = runTurn(uiMode ? PROMPT_UI : PROMPT_HELLO, `probe-${tag}${uiMode ? '-ui' : ''}`);
+    const token = uiMode ? uiToken() : '';
+    if (uiMode) log(`ℹ  токен прогона: ${token} — по нему сверяется результат (bugs/07)`);
+    const turn = runTurn(uiMode ? promptUi(token) : PROMPT_HELLO, `probe-${tag}${uiMode ? '-ui' : ''}`);
     ms = turn.ms;
     setBaseUrl(prevUrl); prevUrl = null;
 
@@ -202,6 +222,16 @@ async function main() {
     } else if (turn.code !== 0) {
       verdict = 'FAIL-TURN';
       evidence = turn.out.split('\n').filter(Boolean).slice(-6).join(' | ').slice(0, 400);
+    } else if (uiMode) {
+      // Ход завершился успешно — но «успешно» говорит модель. Спрашиваем ОС.
+      const titles = notepadTitles();
+      if (titles.includes(token)) {
+        verdict = 'PASS';
+        evidence = `токен ${token} найден в заголовке Блокнота: ${titles}`.slice(0, 400);
+      } else {
+        verdict = 'FAIL-UI-UNVERIFIED';
+        evidence = `ход прошёл, но токена ${token} в Блокноте НЕТ (заголовки: ${titles || 'окон нет'})`.slice(0, 400);
+      }
     } else {
       verdict = 'PASS';
       evidence = turn.out.split('\n').filter((l) => l.trim()).slice(-3).join(' | ').slice(0, 400);
