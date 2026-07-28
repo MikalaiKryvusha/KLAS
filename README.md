@@ -56,7 +56,7 @@ Wikipedia, searchable from the chat).
 | Long-context specialist | Qwythos-9B (Q5_K_M) — **256K context** | needle @148K ✅ — for very long documents |
 | Alt models | Qwen3.5-35B-A3B (fallback), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), Gemma-4-12B (131K, multimodal) | swapped by name |
 | Assistant core | [OpenClaw](https://github.com/openclaw/openclaw) on the local models | the agent loop behind the assistant: skills, tool calls, sessions |
-| Voice (in progress) | [Silero v5](https://github.com/snakers4/silero-models) TTS + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT via sherpa-onnx — fully offline, on CPU | KLAS speaks and hears in Russian; live mic dialogue works, voice choice pending |
+| Voice (in progress) | [Silero](https://github.com/snakers4/silero-models) TTS (`v5_ru` + `v3_en`, resident) + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT via sherpa-onnx — fully offline, on CPU | KLAS speaks and hears; **switches Russian↔English inside one reply**; a turn takes ~8 s end to end |
 | Agent frontend | Zoo Code (VS Code) — local & remote | the agent in your editor |
 | Family chat | [Open WebUI](https://github.com/open-webui/open-webui) — personal accounts, private chats | a simple ChatGPT-like chat for close ones |
 | Knowledge base | kiwix (offline Wikipedia + more `.zim`) with search from chat & from the agent (MCP) | offline knowledge for people and agents |
@@ -112,8 +112,8 @@ the repository — they are pulled at install time.
 | Jarvis | humanlike voice assistant, screen vision, Windows control | 🔧 |
 
 Jarvis is underway, not done: the assistant core is chosen and running on the local models, and the
-Russian voice pipeline speaks, hears and holds a dialogue offline. Still ahead — the Android node,
-voice authentication, and Windows control.
+The voice pipeline speaks, hears and holds a dialogue offline — in Russian and English within a single
+reply. Still ahead — the Android node, voice authentication, and Windows control.
 
 ### Managed by KAIF
 
@@ -161,7 +161,7 @@ LLM работает на геймерской видеокарте; автон�
 | Спец по длинному контексту | Qwythos-9B (Q5_K_M) — **256K контекста** | needle @148K ✅ — для очень длинных документов |
 | Запасные модели | Qwen3.5-35B-A3B (fallback), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), Gemma-4-12B (131K, мультимодальная) | свопятся по имени |
 | Ядро ассистента | [OpenClaw](https://github.com/openclaw/openclaw) на локальных моделях | агентный цикл ассистента: навыки, тул-коллы, сессии |
-| Голос (в работе) | [Silero v5](https://github.com/snakers4/silero-models) TTS + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT через sherpa-onnx — полностью офлайн, на CPU | KLAS говорит и слышит по-русски; живой микрофонный диалог работает, выбор голоса за владельцем |
+| Голос (в работе) | [Silero](https://github.com/snakers4/silero-models) TTS (`v5_ru` + `v3_en`, резидентный) + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT через sherpa-onnx — полностью офлайн, на CPU | KLAS говорит и слышит; **переключается с русского на английский внутри одной реплики**; ход занимает ~8 с от вопроса до ответа |
 | Агентский фронтенд | Zoo Code (VS Code) — локально и удалённо | агент в редакторе |
 | Чат для родных | [Open WebUI](https://github.com/open-webui/open-webui) — личные аккаунты, приватные чаты | простой ChatGPT-подобный чат близким |
 | База знаний | kiwix (оффлайн-Википедия и другие `.zim`) с поиском из чата и от агента (MCP) | оффлайн-знания людям и агентам |
@@ -217,9 +217,9 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # копия без ав
 | Ежедневная работа | повседневное использование, доступ близким | 🔧 |
 | Jarvis | человекоподобный голосовой ассистент, зрение экрана, управление Windows | 🔧 |
 
-Jarvis в работе, а не готов: ядро ассистента выбрано и запущено на локальных моделях, русский голосовой
-тракт говорит, слышит и держит диалог офлайн. Впереди — Android-нода, голосовая аутентификация и
-управление Windows.
+Jarvis в работе, а не готов: ядро ассистента выбрано и запущено на локальных моделях, голосовой тракт
+говорит, слышит и держит диалог офлайн — по-русски и по-английски внутри одной реплики. Впереди —
+Android-нода, голосовая аутентификация и управление Windows.
 
 ### Управляется через KAIF
 
