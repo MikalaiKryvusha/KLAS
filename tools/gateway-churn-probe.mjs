@@ -20,11 +20,17 @@
 //  печатает число процессов гейтвея по данным ОС после каждого хода, то есть смерть заметил бы]
 
 import { gatewayToken } from './voice/pipeline.mjs';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
+import os from 'node:os';
 
 const GATEWAY_URL = 'http://127.0.0.1:18789/v1/chat/completions';
 const N = Number(process.argv.find((a) => /^\d+$/.test(a)) ?? 12);
 const SAME_SESSION = process.argv.includes('--same');
+// `--load`: занять ядра посторонней работой. Оба падения 2026-07-29 случились при загруженном CPU
+// (рот и уши считают на тех же ядрах, что и гейтвей), а сам по себе churn его не убивает — значит
+// следующий подозреваемый именно голодание событийного цикла. Утром в логе была ровно такая улика:
+// `diagnostic: liveness warning … event_loop_delay`.
+const LOAD = process.argv.includes('--load');
 
 /** Жив ли процесс гейтвея прямо сейчас — спрашиваем ОС, а не догадываемся по ошибке fetch. */
 function gatewayProcessCount() {
@@ -79,7 +85,20 @@ const QUESTIONS = [
   'Скажи «привет» одним словом.',
 ];
 
-console.log(`=== СТЕНД СМЕНЫ СЕССИЙ (bugs/15) === ходов: ${N} · режим: ${SAME_SESSION ? 'ОДНА сессия (контроль)' : 'НОВАЯ сессия на каждый ход'}`);
+// Нагрузка на ядра: отдельные процессы с бесконечным счётом. Именно ПРОЦЕССЫ, а не потоки внутри
+// стенда, — иначе я загружу собственный событийный цикл и буду мерить свою же медлительность.
+const loaders = [];
+if (LOAD) {
+  const workers = Math.max(1, os.cpus().length - 1);
+  for (let i = 0; i < workers; i++) {
+    loaders.push(spawn(process.execPath, ['-e', 'while(true){Math.sqrt(Math.random())}'], { stdio: 'ignore' }));
+  }
+  console.log(`нагрузка: ${workers} процессов заняли ядра (всего ядер ${os.cpus().length})`);
+}
+const stopLoad = () => { for (const p of loaders) { try { p.kill(); } catch { /* уже мёртв */ } } };
+process.on('exit', stopLoad);
+
+console.log(`=== СТЕНД СМЕНЫ СЕССИЙ (bugs/15) === ходов: ${N} · режим: ${SAME_SESSION ? 'ОДНА сессия (контроль)' : 'НОВАЯ сессия на каждый ход'}${LOAD ? ' · CPU ЗАГРУЖЕН' : ''}`);
 console.log(`процессов гейтвея до старта: ${gatewayProcessCount()}\n`);
 console.log('#   сессия        мс      finish      симв.  процессов  примечание');
 
@@ -102,6 +121,7 @@ for (let i = 1; i <= N; i++) {
   }
 }
 
-if (!died) console.log(`\n✅ Гейтвей пережил все ${N} ходов (${SAME_SESSION ? 'одна сессия' : 'новых сессий'}). Гипотеза этим прогоном НЕ подтверждена.`);
+stopLoad();
+if (!died) console.log(`\n✅ Гейтвей пережил все ${N} ходов (${SAME_SESSION ? 'одна сессия' : 'новых сессий'}${LOAD ? ', CPU загружен' : ''}). Гипотеза этим прогоном НЕ подтверждена.`);
 console.log('\n⚠️ Стенд намеренно НЕ поднимает гейтвей обратно: состояние после падения — улика.');
 console.log('   Поднять: powershell -File F:\\KLAS\\tools\\klas.ps1 -Action up');
