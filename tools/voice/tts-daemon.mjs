@@ -31,8 +31,11 @@ export class TtsDaemon {
   #readyPromise = null;
   #checked = null;        // мемоизированный результат «загружен + кодировка целая»
 
-  constructor({ voice = 'eugene' } = {}) {
+  // voiceEn === null ⇒ решает сайдкар (там лежит подобранный измерением дефолт, bugs/11).
+  // Дублировать значение здесь нельзя: два дефолта в двух файлах разъезжаются молча.
+  constructor({ voice = 'eugene', voiceEn = null } = {}) {
     this.voice = voice;
+    this.voiceEn = voiceEn;
     this.#readyPromise = new Promise((res) => { this.#readyResolve = res; });
     this.#proc = spawn(PY, [SIDECAR], { windowsHide: true });
     this.#proc.stderr.resume();   // тайминги/варнинги питона нам в диалоге не нужны
@@ -79,7 +82,7 @@ export class TtsDaemon {
   /** Синтезировать фразу в файл. Возвращает ответ сайдкара: {ok, audio_sec, t_synth_sec} либо
    *  {ok:false, reason:'no-cyrillic'} — «нечего произносить» (bugs/06), это НЕ поломка. */
   say(text, outWav) {
-    return this.#request({ text, out: outWav, voice: this.voice });
+    return this.#request({ text, out: outWav, voice: this.voice, ...(this.voiceEn ? { voice_en: this.voiceEn } : {}) });
   }
 
   stop() { try { this.#proc?.stdin.end('quit\n'); } catch { /* уже мёртв */ } }

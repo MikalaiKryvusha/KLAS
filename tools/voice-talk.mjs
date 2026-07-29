@@ -18,6 +18,8 @@
 //   node tools/voice-talk.mjs --device "имя dshow-микрофона"   (дефолт — NVIDIA Broadcast)
 //   node tools/voice-talk.mjs --no-play           → не проигрывать ответ (тихий тест)
 //   node tools/voice-talk.mjs --voice baya        → голос Silero (дефолт eugene — выбор владельца)
+//   node tools/voice-talk.mjs --voice-en en_46    → английский диктор для латиницы (дефолт en_23,
+//        подобран измерением под eugene — bugs/11; кандидаты рядом: en_46, en_112)
 // Выход из диалога: пустая реплика (сразу два Enter) или Ctrl+C.
 //
 // ⚠️ Требуется ПОДНЯТЫЙ гейтвей OpenClaw (`powershell -File tools\klas.ps1 -Action up`).
@@ -40,6 +42,9 @@ const wavArg = flag('--wav');
 const textArg = flag('--text');
 const device = flag('--device') ?? MIC_DEFAULT;
 const voice = flag('--voice') ?? 'eugene';           // дефолт владельца (домашка 02)
+// Английский диктор: дефолт живёт в сайдкаре (подобран измерением под `eugene`, bugs/11).
+// Флаг существует, чтобы владелец мог сравнить кандидатов УШАМИ, не трогая код: en_23 · en_46 · en_112.
+const voiceEn = flag('--voice-en');
 const play = !args.includes('--no-play');
 const sessionUser = `voice-${new Date().toISOString().slice(0, 10)}`;   // один день = одна беседа
 
@@ -112,7 +117,7 @@ if (play) {
 }
 
 console.log(`Голосовой диалог с KLAS (сессия ${sessionUser}, голос ${voice}${wavArg || textArg ? '' : `, микрофон: ${device}`}).`);
-const tts = new TtsDaemon({ voice });
+const tts = new TtsDaemon({ voice, voiceEn });
 const ready = await tts.ready();               // прогрев РТА идёт параллельно ожиданию первой реплики
 if (ready.stage === 'dead') { console.error('РОТ не запустился — см. venv F:\\KLAS\\voice\\venv (plans/11)'); process.exit(1); }
 // Сломанная кодировка НЕ мешает синтезу — она делает его бессмысленным (bugs/08). Лучше честный
