@@ -4,7 +4,7 @@
 //
 // Использование:
 //   const tts = new TtsDaemon({ voice: 'eugene' });
-//   await tts.ready();                       // ждём загрузку модели (один раз)
+//   await tts.ready();                       // ждём загрузку модели + проверку кодировки (один раз)
 //   const r = await tts.say('Привет.', 'out.wav');   // r.ok / r.reason === 'no-cyrillic'
 //   tts.stop();
 //
@@ -17,11 +17,19 @@ import path from 'node:path';
 const PY = 'F:\\KLAS\\voice\\venv\\Scripts\\python.exe';   // venv голосового тракта (вне git)
 const SIDECAR = path.join(import.meta.dirname, 'silero_daemon.py');
 
+// ОХРАННИК КОДИРОВКИ (bugs/08). Порча текста на стыке Node↔Python не падает и не логируется —
+// она ЗВУЧИТ: моджибейк «РџСЂРёРІРµС‚» состоит из настоящих кириллических букв, поэтому проходит
+// все проверки и выходит в динамики бормотанием. Единственная надёжная улика — прогнать эталонную
+// строку туда-обратно и сверить побуквенно. Канарейка нарочно несёт всё, на чём ломаются кодировки:
+// кириллицу, «ё», длинное тире и цифры.
+const CANARY = 'Проверка кодировки — ёжик, 42.';
+
 export class TtsDaemon {
   #proc = null;
   #pending = [];          // FIFO ожидающих ответа резолверов
   #readyResolve = null;
   #readyPromise = null;
+  #checked = null;        // мемоизированный результат «загружен + кодировка целая»
 
   constructor({ voice = 'eugene' } = {}) {
     this.voice = voice;
@@ -44,16 +52,34 @@ export class TtsDaemon {
     });
   }
 
-  ready() { return this.#readyPromise; }
+  /** Одна строка запроса → один ответ сайдкара (FIFO). */
+  #request(obj) {
+    if (!this.#proc || this.#proc.exitCode !== null) return Promise.resolve({ ok: false, error: 'РОТ не запущен' });
+    return new Promise((resolve) => {
+      this.#pending.push(resolve);
+      this.#proc.stdin.write(`${JSON.stringify(obj)}\n`);
+    });
+  }
+
+  /**
+   * Готовность РТА: модель загружена И текст не портится по дороге.
+   * Возвращает {stage:'ready'|'dead'|'encoding-broken', …}. Вызывающий ОБЯЗАН отличать
+   * 'encoding-broken' от 'ready': на сломанной кодировке синтез «работает», но говорит мусор.
+   */
+  ready() {
+    this.#checked ??= this.#readyPromise.then(async (msg) => {
+      if (msg.stage === 'dead') return msg;
+      const back = await this.#request({ echo: CANARY });
+      if (back?.echo === CANARY) return msg;
+      return { stage: 'encoding-broken', sent: CANARY, got: back?.echo ?? null, enc: msg.enc ?? null };
+    });
+    return this.#checked;
+  }
 
   /** Синтезировать фразу в файл. Возвращает ответ сайдкара: {ok, audio_sec, t_synth_sec} либо
    *  {ok:false, reason:'no-cyrillic'} — «нечего произносить» (bugs/06), это НЕ поломка. */
   say(text, outWav) {
-    if (!this.#proc || this.#proc.exitCode !== null) return Promise.resolve({ ok: false, error: 'РОТ не запущен' });
-    return new Promise((resolve) => {
-      this.#pending.push(resolve);
-      this.#proc.stdin.write(`${JSON.stringify({ text, out: outWav, voice: this.voice })}\n`);
-    });
+    return this.#request({ text, out: outWav, voice: this.voice });
   }
 
   stop() { try { this.#proc?.stdin.end('quit\n'); } catch { /* уже мёртв */ } }

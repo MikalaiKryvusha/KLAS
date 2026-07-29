@@ -12,6 +12,13 @@ import time
 import urllib.request
 from pathlib import Path
 
+# Тот же контракт кодировки, что у резидентного брата silero_daemon.py (bugs/08): наши сайдкары
+# ВСЕГДА говорят UTF-8, независимо от локали машины и от окружения вызывающего. Здесь текст
+# приходит через argv (Windows отдаёт его Unicode-строкой, поэтому вход безопасен), но JSON с
+# кириллицей уходит в stderr — и его читает Node как UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    _stream.reconfigure(encoding="utf-8", errors="strict")
+
 MODELS_DIR = Path(r"F:\KLAS\voice\models")          # веса вне git (карта: инфраструктура voice\)
 SAMPLE_RATE = 48000                                  # максимум качества Silero (8/24/48 кГц)
 DEFAULT_VOICE = "aidar"                              # мужской, ближе к строю Jarvis; сменит владелец

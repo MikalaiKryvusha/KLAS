@@ -115,6 +115,15 @@ console.log(`Голосовой диалог с KLAS (сессия ${sessionUser
 const tts = new TtsDaemon({ voice });
 const ready = await tts.ready();               // прогрев РТА идёт параллельно ожиданию первой реплики
 if (ready.stage === 'dead') { console.error('РОТ не запустился — см. venv F:\\KLAS\\voice\\venv (plans/11)'); process.exit(1); }
+// Сломанная кодировка НЕ мешает синтезу — она делает его бессмысленным (bugs/08). Лучше честный
+// отказ на старте, чем полный диалог бормотания, который человек будет слушать и не понимать.
+if (ready.stage === 'encoding-broken') {
+  console.error('РОТ отвечает в неверной кодировке — речь была бы моджибейком, а не словами (bugs/08).');
+  console.error(`  отправлено: ${ready.sent}`);
+  console.error(`  вернулось : ${ready.got}`);
+  console.error(`  потоки питона: ${JSON.stringify(ready.enc)}`);
+  process.exit(1);
+}
 
 try {
   gatewayToken();

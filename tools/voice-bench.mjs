@@ -198,7 +198,17 @@ rmSync(OUT_DIR, { recursive: true, force: true });
 mkdirSync(OUT_DIR, { recursive: true });
 
 const tts = new TtsDaemon({ voice });
-if ((await tts.ready()).stage === 'dead') { console.error('РОТ не запустился — см. plans/11'); process.exit(1); }
+const ttsReady = await tts.ready();
+if (ttsReady.stage === 'dead') { console.error('РОТ не запустился — см. plans/11'); process.exit(1); }
+// Бенч обязан краснеть на сломанной кодировке, а не мерить тайминги моджибейка (bugs/08). Именно
+// эта проверка отсутствовала, когда тракт «прошёл 35/35» у агента и бормотал у владельца: бенч
+// гонялся в окружении с заданной PYTHONIOENCODING, которой в терминале владельца нет.
+if (ttsReady.stage === 'encoding-broken') {
+  console.error('❌ ОХРАННИК КОДИРОВКИ: текст портится на пути Node↔Python (bugs/08) — тракт говорил бы моджибейком.');
+  console.error(`   отправлено «${ttsReady.sent}» · вернулось «${ttsReady.got}» · потоки питона ${JSON.stringify(ttsReady.enc)}`);
+  process.exit(1);
+}
+console.log(`[рот] кодировка потоков питона: ${JSON.stringify(ttsReady.enc)} · канарейка прошла`);
 
 const cases = quick ? CASES.filter((c) => c.hot) : CASES;
 console.log(`=== БЕНЧ ГОЛОСОВОГО ТРАКТА (голос ${voice}, ${audible ? 'со звуком' : 'без звука, окно воспроизведения выдерживается'}) ===`);

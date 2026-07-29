@@ -17,6 +17,7 @@
 #   → {"ok": true, "out": "...", "audio_sec": 2.1, "t_synth_sec": 0.4, "langs": ["ru", "en", "ru"]}
 #   → {"ok": false, "reason": "nothing-to-say"}   ← в тексте нет ни букв, ни цифр (НЕ поломка)
 #   → {"ok": false, "error": "..."}               ← настоящая ошибка синтеза
+#   ← {"echo": "<канарейка>"} → {"echo": "<она же>"}  ← охранник кодировки (bugs/08), см. ниже
 # После загрузки русской модели печатает {"stage": "ready"}; выход — EOF на stdin или строка "quit".
 #
 # Поиск/скачивание русских весов переиспользуем из silero_say.py (DRY): один источник правды.
@@ -28,6 +29,19 @@ import time
 import urllib.request
 import wave
 from pathlib import Path
+
+# ⚠️ КОДИРОВКА ПОТОКОВ — ПЕРВЫМ ДЕЛОМ, ДО ЛЮБОГО ЧТЕНИЯ (bugs/08).
+# Node пишет сюда UTF-8, но Python на Windows открывает stdin-ПАЙП в кодировке ЛОКАЛИ
+# (`locale.getpreferredencoding()` = cp1251 на русской системе), если UTF-8-режим не включён.
+# Тогда «Привет» приезжает как «РџСЂРёРІРµС‚» — это ВАЛИДНАЯ кириллица, поэтому охранник её
+# пропускает, и Silero честно проговаривает «Р-џ-С-Ђ…»: владелец слышит «сррс рсрср срр».
+# Лечится не переменной окружения у вызывающего (её может не быть — именно так баг и жил:
+# у агента PYTHONIOENCODING была задана, у владельца нет), а здесь, в источнике: сайдкар сам
+# объявляет свой контракт — он ВСЕГДА говорит UTF-8, кто бы его ни запустил.
+# errors="strict" намеренно: тихая замена символов вернула бы бесшумную порчу, ради которой
+# этот блок и написан.
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    _stream.reconfigure(encoding="utf-8", errors="strict")
 
 sys.path.insert(0, str(Path(__file__).parent))
 from silero_say import MODELS_DIR, SAMPLE_RATE, ensure_model  # noqa: E402
@@ -258,7 +272,9 @@ def main() -> None:
     torch.set_num_threads(4)  # хватает для realtime, систему не душим
     load_model("ru", torch)   # русская — сразу; английская подгрузится при первой латинице
     log({"stage": "ready", "t_model_load_sec": round(time.perf_counter() - t0, 2)})
-    out_line({"stage": "ready", "model": "v5_ru+v3_en(lazy)"})
+    # Кодировки объявляем В ОТВЕТЕ: вызывающему не нужно верить нам на слово — он видит контракт
+    out_line({"stage": "ready", "model": "v5_ru+v3_en(lazy)",
+              "enc": {"in": sys.stdin.encoding, "out": sys.stdout.encoding}})
 
     for line in sys.stdin:
         line = line.strip()
@@ -268,6 +284,13 @@ def main() -> None:
             req = json.loads(line)
         except json.JSONDecodeError as e:
             out_line({"ok": False, "error": f"плохой JSON запроса: {e}"})
+            continue
+
+        # Охранник кодировки (bugs/08): строку гоняем туда-обратно БЕЗ обработки. Расхождение
+        # означает, что текст портится на пути между Node и питоном, — и тогда голосовая сессия
+        # обязана отказаться стартовать, а не бормотать моджибейк в динамики.
+        if "echo" in req:
+            out_line({"echo": req["echo"]})
             continue
 
         text = (req.get("text") or "").strip()
