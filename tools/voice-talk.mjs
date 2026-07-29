@@ -102,7 +102,10 @@ async function turn(tts, { wav, text }) {
   });
   console.log(`🤖 KLAS: ${r.reply}`);
   for (const s of r.sentences.filter((x) => !x.ok)) {
-    if (s.reason === 'no-cyrillic') console.log(`(не озвучено: «${s.text}» — нет русских букв, bugs/06)`);
+    // Имя причины должно совпадать с тем, что РЕАЛЬНО присылает сайдкар (`nothing-to-say`).
+    // Пока здесь стояло устаревшее `no-cyrillic`, штатный случай «произносить нечего» уходил в
+    // ветку ошибки и выглядел поломкой тракта.
+    if (s.reason === 'nothing-to-say') console.log(`(не озвучено: «${s.text}» — ни букв, ни цифр, bugs/06)`);
     else console.error(`РОТ споткнулся на «${s.text}»: ${s.reason}`);
   }
 

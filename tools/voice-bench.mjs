@@ -64,6 +64,16 @@ const CASES = [
   { id: 'единицы', q: 'Одним предложением: какая скорость и температура у видеокарты RTX 5070 Ti под нагрузкой?', danger: 'требование владельца: числа и единицы должны звучать словами, а не «20 C»' },
 ];
 
+// Строки-ЗАГЛУШКИ ядра: формально это ответ, фактически — провал хода (bugs/12). Чёрный список,
+// а не белый: полноценно решил бы `finish_reason: stop` из SSE, но его пришлось бы тянуть через
+// боевой `runTurn` ради проверки. Встретил новую форму отказа — добавляй сюда строкой.
+const CORE_STUB_REPLIES = [
+  /^no response from openclaw\.?$/i,
+  /^\(?no (reply|answer|response)\)?\.?$/i,
+  /^error[:\s]/i,
+  /^ЯДРО ответило HTTP/i,
+];
+
 const norm = (s) => s.toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
 const sha = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -137,7 +147,15 @@ async function runCase(tts, c) {
   }
   await mic?.stop();
 
-  add('T1 ход завершён', Boolean(r.reply), r.reply ? `${r.reply.length} симв.` : 'пустой ответ ядра');
+  // T1 — ход РЕАЛЬНО состоялся. Одной непустоты мало (bugs/12): гейтвей отвечает строкой-заглушкой
+  // («No response from OpenClaw.»), она непустая, кириллическая и прекрасно синтезируется — поэтому
+  // ВСЕ пять проверок оставались зелёными на провалившемся ходе, и бенч отрапортовал 35/35.
+  // Бенч существует именно чтобы не отдавать владельцу сырое; в этой роли он соврал.
+  const stub = CORE_STUB_REPLIES.find((re) => re.test(r.reply.trim()));
+  add('T1 ход завершён', Boolean(r.reply) && !stub,
+    !r.reply ? 'пустой ответ ядра'
+      : stub ? `ЯДРО НЕ ОТВЕТИЛО — заглушка вместо ответа: «${r.reply.trim().slice(0, 60)}»`
+        : `${r.reply.length} симв.`);
 
   // T2 — уникальность имён файлов. Совпадение = следующий синтез пишет в играющий файл.
   const names = r.sentences.map((s) => s.wav);

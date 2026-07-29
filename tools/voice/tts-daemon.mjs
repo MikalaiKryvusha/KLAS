@@ -80,7 +80,7 @@ export class TtsDaemon {
   }
 
   /** Синтезировать фразу в файл. Возвращает ответ сайдкара: {ok, audio_sec, t_synth_sec} либо
-   *  {ok:false, reason:'no-cyrillic'} — «нечего произносить» (bugs/06), это НЕ поломка. */
+   *  {ok:false, reason:'nothing-to-say'} — в тексте нет ни букв, ни цифр (bugs/06): это НЕ поломка. */
   say(text, outWav) {
     return this.#request({ text, out: outWav, voice: this.voice, ...(this.voiceEn ? { voice_en: this.voiceEn } : {}) });
   }
