@@ -74,6 +74,13 @@
       "check": { "file": "voice/models/v5_ru.pt", "sizeBytes": 145382211 },
       "$comment": "русский TTS (Г1): «рот» KLAS — tools/voice-say.mjs; он же TTS-провайдер ядра OpenClaw (tts-local-cli)"
     },
+    "voice-silero-v3-en": {
+      "kind": "url",
+      "url": "https://models.silero.ai/models/tts/en/v3_en.pt",
+      "dest": "voice/models/v3_en.pt",
+      "check": { "file": "voice/models/v3_en.pt", "sizeBytes": 57194546 },
+      "$comment": "английский TTS: без него ДВУЯЗЫЧНАЯ речь (требование владельца) на чистой машине не работает — латинские куски реплики просто не синтезируются. Диктор en_23 подобран измерением под русский eugene (bugs/11). ⚠️ У models.silero.ai истёк SSL-сертификат: Python его цепочку НЕ принимает, а Node и PowerShell принимают — поэтому качать только этим deploy'ем (проверено 2026-07-29: HEAD 200, 57194546 байт), а не питоном из сайдкара"
+    },
     "voice-gigaam-onnx": {
       "kind": "url",
       "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16/resolve/main/model.int8.onnx",
@@ -89,6 +96,7 @@
     }
   },
   "$todo": [
+    "voice-gigaam-punct: НАМЕРЕННО не в манифесте — уши с латиницей и пунктуацией (bugs/10) развёрнуты как ОПЦИЯ (--ears punct) и ждут вердикта владельца (интервью 007 Q1). Класть 224 МБ в каждую чистую установку ради модели, которая не дефолт, — против правила «минимум сущностей». Если владелец скажет да: url = https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/main/{model.int8.onnx,tokens.txt} → voice/models/gigaam-v3-ctc-punct/",
     "kiwix-zim: НЕ в манифесте намеренно — базы знаний .zim выбираются интерактивно из живого каталога Kiwix мастером tools/install.mjs (lib/zim-catalog.mjs), качаются в kiwixdb/ (план 05, идея 12)",
     "sha256 у model-gemma-4-12b снят с живого файла; проверить размер после первого скачивания deploy'ем",
     "модель(и) по умолчанию — пересмотреть по итогам Фазы 2b"
