@@ -140,6 +140,54 @@ def digits_to_words(text: str) -> str:
     return re.sub(r"-?\d+", lambda m: number_to_ru_words(int(m.group())), text)
 
 
+# --- Числа словами по-английски (bugs/13): v3_en глотает цифры ровно так же, как русская модель ---
+# Замер: «It costs 115 dollars.» = 1.19 с, «It costs dollars.» = 1.19 с (то есть числа в звуке нет),
+# «It costs one hundred fifteen dollars.» = 2.20 с. Русские числительные в латинском отрезке звучали
+# бы дико, поэтому здесь свой, маленький и без зависимостей, разворот.
+_EN_ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+            "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+            "eighteen", "nineteen"]
+_EN_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+_EN_SCALES = ["", "thousand", "million", "billion", "trillion"]
+
+
+def _en_under_1000(n: int) -> list:
+    words = []
+    if n >= 100:
+        words += [_EN_ONES[n // 100], "hundred"]
+        n %= 100
+    if n >= 20:
+        words.append(_EN_TENS[n // 10])
+        n %= 10
+        if n:
+            words.append(_EN_ONES[n])
+    elif n:
+        words.append(_EN_ONES[n])
+    return words
+
+
+def number_to_en_words(num: int) -> str:
+    if num == 0:
+        return "zero"
+    words = ["minus"] if num < 0 else []
+    num = abs(num)
+    groups = []
+    while num:
+        groups.append(num % 1000)
+        num //= 1000
+    for power in range(len(groups) - 1, -1, -1):
+        if not groups[power]:
+            continue
+        words += _en_under_1000(groups[power])
+        if power:
+            words.append(_EN_SCALES[power])
+    return " ".join(words)
+
+
+def digits_to_en_words(text: str) -> str:
+    return re.sub(r"-?\d+", lambda m: number_to_en_words(int(m.group())), text)
+
+
 # --- Единицы измерения словами (требование владельца 2026-07-29) ---
 # Сырой выход LLM вроде «20 C» или «115 кб/c» человеку на слух непонятен, а синтез читает такое
 # по буквам. Первый слой лечения — инструкция модели (VOICE_STYLE в pipeline.mjs), но локальная
@@ -248,10 +296,17 @@ def synth_segments(text, voice_ru, voice_en, torch):
     text = expand_units(strip_markdown(text))
     for lang, chunk in split_by_script(text):
         if lang is None:
-            # букв нет вовсе: цифры разворачиваем в русские слова, иначе Silero падает (bugs/06)
+            # Букв нет вовсе (только цифры/пунктуация): произносим по-русски, если есть что.
             if not DIGIT.search(chunk):
                 continue
-            chunk, lang = digits_to_words(chunk), "ru"
+            lang = "ru"
+        # ⚠️ Цифры разворачиваем в слова у ЛЮБОГО русского отрезка, а не только у безбуквенного
+        # (bugs/13). Silero v5_ru не читает цифры НИГДЕ — он их молча выбрасывает: «115 килобайт в
+        # секунду» звучит ровно столько же, сколько «килобайт в секунду» (1.09 с против 1.09 с),
+        # а «сто пятнадцать килобайт в секунду» — 1.74 с. Прежняя версия разворачивала числа только
+        # там, где их отсутствие РОНЯЛО синтез (bugs/06), и потому лечила заметный симптом, пропуская
+        # тихий: в обычном предложении число просто исчезало из речи.
+        chunk = digits_to_words(chunk) if lang == "ru" else digits_to_en_words(chunk)
         speaker = voice_ru if lang == "ru" else voice_en
         model = load_model(lang, torch)
         if pieces:

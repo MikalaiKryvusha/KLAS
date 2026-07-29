@@ -37,7 +37,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { TtsDaemon } from './voice/tts-daemon.mjs';
-import { firstSentenceCut, gatewayAlive, runTurn } from './voice/pipeline.mjs';
+import { firstSentenceCut, gatewayAlive, runTurn, stripCoreMarkup } from './voice/pipeline.mjs';
 import { acquireVoiceSession } from './voice/single-instance.mjs';
 
 const HERE = import.meta.dirname;
@@ -243,6 +243,25 @@ if (chunkFails.length) {
   process.exit(1);
 }
 
+// --- T0c: РАЗМЕТКА ЯДРА (охранник bugs/14) ---
+// Ядро иногда оборачивает ответ в свою директиву синтеза `[[tts(text="…")]]` и отдаёт её текстом —
+// без чистки владелец услышал бы «ти-ти-эс текст» перед ответом. Вторая половина фикстуры так же
+// важна, как первая: охранник обязан доказать, что НЕ трогает обычный текст, иначе «чистка» легко
+// превращается в тихую порчу законных фраз.
+const MARKUP_FIXTURE = [
+  ['[[tts(text="Привет, Николай.")]]', 'Привет, Николай.'],
+  ['[[tts(text=\'Ответ на вопрос.\')]]', 'Ответ на вопрос.'],
+  ['Привет, Николай.', 'Привет, Николай.'],                       // обычный текст — не трогать
+  ['Функция f(x) = 2x при x [1..5].', 'Функция f(x) = 2x при x [1..5].'],  // скобки НЕ разметка
+];
+const markupBad = MARKUP_FIXTURE.filter(([raw, want]) => stripCoreMarkup(raw) !== want);
+console.log(`[T0c разметка ядра] ${markupBad.length === 0 ? '✅' : '❌'} ${MARKUP_FIXTURE.length - markupBad.length}/${MARKUP_FIXTURE.length}` +
+  (markupBad.length ? ` — ${markupBad.map(([raw, want]) => `«${raw}» → «${stripCoreMarkup(raw)}» (ждали «${want}»)`).join(' | ')}` : ''));
+if (markupBad.length) {
+  console.error('Очистка разметки ядра сломана (bugs/14): в речь уйдёт мусор либо пропадёт законный текст.');
+  process.exit(1);
+}
+
 if (!(await gatewayAlive())) {
   console.error('Гейтвей OpenClaw не поднят — бенч невозможен.\nПодними стек: powershell -File F:\\KLAS\\tools\\klas.ps1 -Action up');
   process.exit(1);
@@ -263,6 +282,36 @@ if (ttsReady.stage === 'encoding-broken') {
   process.exit(1);
 }
 console.log(`[рот] кодировка потоков питона: ${JSON.stringify(ttsReady.enc)} · канарейка прошла`);
+
+// --- T0b: НОРМАЛИЗАЦИЯ (охранник bugs/13) ---
+// Silero НЕ ЧИТАЕТ ЦИФРЫ — ни русская модель, ни английская: они молча выбрасывают цифровые токены,
+// и «Температура 20 градусов» звучит как «температура градусов». Дефект тихий (ни ошибки, ни лога) и
+// от ответа модели не зависит, поэтому проверяется здесь ДЕТЕРМИНИРОВАННО, а не надеждой, что ядро
+// сегодня напишет число цифрами. Инвариант простой и потому надёжный: в ПРОИЗНЕСЁННОМ тексте не
+// должно остаться ни одной цифры и ни одного сокращения единиц.
+// ⚠️ Прежний бенч этот класс пропускал: порог WORD_MATCH_MIN = 0.6 прощал пропажу одного токена из
+// четырёх («115 килобайт в секунду» → 0.75 при выпавшем числе).
+const NORM_FIXTURE = [
+  '115 кб/с',
+  'Температура 20 C, влажность 60%.',
+  '42 плюс 14 будет 56.',
+  'Диск на 2 ТБ и 500 ГБ.',
+  'Сейчас 2026 год.',
+  'It costs 115 dollars.',           // английский отрезок — свои числительные
+];
+const normBad = [];
+for (const [i, text] of NORM_FIXTURE.entries()) {
+  const r = await tts.say(text, path.join(OUT_DIR, `norm-${i}.wav`));
+  const spoken = r.ok ? (r.spoken ?? '') : '';
+  if (!r.ok) normBad.push(`«${text}» → не озвучено (${r.reason ?? r.error})`);
+  else if (/\d/.test(spoken)) normBad.push(`«${text}» → в речи осталась ЦИФРА: «${spoken}»`);
+}
+console.log(`[T0b нормализация] ${normBad.length === 0 ? '✅' : '❌'} ${NORM_FIXTURE.length - normBad.length}/${NORM_FIXTURE.length}` +
+  (normBad.length ? ` — ${normBad.join(' | ')}` : ' — числа и единицы разворачиваются в слова'));
+if (normBad.length) {
+  console.error('Числа не доходят до речи (bugs/13): ассистент произносит фразы БЕЗ них.');
+  process.exit(1);
+}
 
 const cases = quick ? CASES.filter((c) => c.hot) : CASES;
 console.log(`=== БЕНЧ ГОЛОСОВОГО ТРАКТА (голос ${voice}, ${audible ? 'со звуком' : 'без звука, окно воспроизведения выдерживается'}) ===`);
