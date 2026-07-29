@@ -141,6 +141,11 @@ export async function runTurn({ tts, question, user, outDir, playFn, onText }) {
   };
 
   let full = '', buf = '';
+  // Причина завершения хода из SSE. Нужна охранникам бенча: непустой текст НЕ доказывает, что ход
+  // состоялся (bugs/12 — гейтвей отдавал строку-заглушку, и все проверки оставались зелёными).
+  // Забирать ОБЯЗАТЕЛЬНО до `if (!delta) continue`: финальный чанк несёт finish_reason при ПУСТОЙ
+  // дельте, поэтому проверка на контент выбросила бы ровно то событие, ради которого всё делается.
+  let finishReason = null;
   const decoder = new TextDecoder();
   for await (const chunk of res.body) {
     for (const line of decoder.decode(chunk, { stream: true }).split('\n')) {
@@ -149,6 +154,8 @@ export async function runTurn({ tts, question, user, outDir, playFn, onText }) {
       if (payload === '[DONE]') continue;
       let evt;
       try { evt = JSON.parse(payload); } catch { continue; }
+      const fr = evt.choices?.[0]?.finish_reason;
+      if (fr) finishReason = fr;
       const delta = evt.choices?.[0]?.delta?.content;
       if (!delta) continue;
       full += delta;
@@ -171,6 +178,9 @@ export async function runTurn({ tts, question, user, outDir, playFn, onText }) {
     // ядра снова станет невидимым. Один источник, две роли, ни одна не подменяет другую.
     reply: stripCoreMarkup(full.trim()),
     rawReply: full.trim(),
+    // null = ядро не прислало причину вовсе (тоже сведение, а не «всё хорошо»): охранник обязан
+    // различать «ход завершился штатно», «ход оборвался» и «не знаю» — см. bugs/12.
+    finishReason,
     sentences,
     coreMs,
     ttfaMs: firstAudioAt === null ? null : firstAudioAt - t0,   // главная метрика (researches/12 §1)

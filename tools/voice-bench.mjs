@@ -39,6 +39,7 @@ import path from 'node:path';
 import { TtsDaemon } from './voice/tts-daemon.mjs';
 import { firstSentenceCut, gatewayAlive, runTurn, stripCoreMarkup } from './voice/pipeline.mjs';
 import { acquireVoiceSession } from './voice/single-instance.mjs';
+import { coreTurnVerdict, TURN_FIXTURE } from './voice/turn-verdict.mjs';
 
 const HERE = import.meta.dirname;
 const OUT_DIR = 'F:\\KLAS\\voice\\bench';          // отдельная папка: не мешаем артефактам диалога
@@ -64,23 +65,8 @@ const CASES = [
   { id: 'единицы', q: 'Одним предложением: какая скорость и температура у видеокарты RTX 5070 Ti под нагрузкой?', danger: 'требование владельца: числа и единицы должны звучать словами, а не «20 C»' },
 ];
 
-// Строки-ЗАГЛУШКИ ядра: формально это ответ, фактически — провал хода (bugs/12). Чёрный список,
-// а не белый: полноценно решил бы `finish_reason: stop` из SSE, но его пришлось бы тянуть через
-// боевой `runTurn` ради проверки. Встретил новую форму отказа — добавляй сюда строкой.
-const CORE_STUB_REPLIES = [
-  /^no response from openclaw\.?$/i,
-  /^\(?no (reply|answer|response)\)?\.?$/i,
-  /^error[:\s]/i,
-  /^ЯДРО ответило HTTP/i,
-];
-
-// ОСТАТКИ МАШИННОЙ РАЗМЕТКИ в ответе, который идёт человеку В УШИ (класс bugs/14).
-// T0c гарантирует, что ИЗВЕСТНАЯ форма `[[tts(...)]]` снимается; здесь ловится НЕИЗВЕСТНАЯ — новая
-// директива, недорезанный тул-колл, JSON. Ни одна из этих последовательностей не встречается в живой
-// русской речи, поэтому ложных тревог они не дают, а молчаливое проглатывание мусора прекращают:
-// именно оно позволило bugs/12 и bugs/14 месяц проходить как «успех».
-const CORE_MARKUP_LEAK = [/\[\[|\]\]/, /<\/?tool_call>/i, /<\|[a-z_]+\|>/i, /^\s*[{[]"/];
-
+// Вердикт «состоялся ли ход ядра» вынесен в отдельный модуль: импортировать чистую функцию из
+// ИСПОЛНЯЕМОГО скрипта нельзя — такой импорт запускает весь бенч (поймано на себе 2026-07-29).
 const norm = (s) => s.toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
 const sha = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -158,15 +144,10 @@ async function runCase(tts, c) {
   // («No response from OpenClaw.»), она непустая, кириллическая и прекрасно синтезируется — поэтому
   // ВСЕ пять проверок оставались зелёными на провалившемся ходе, и бенч отрапортовал 35/35.
   // Бенч существует именно чтобы не отдавать владельцу сырое; в этой роли он соврал.
-  // Судим по СЫРОМУ ответу: `reply` уже очищен для человека, и по нему утечку не увидеть.
-  const raw = r.rawReply ?? r.reply;
-  const stub = CORE_STUB_REPLIES.find((re) => re.test(raw.trim()));
-  const leak = CORE_MARKUP_LEAK.find((re) => re.test(raw));
-  add('T1 ход завершён', Boolean(r.reply) && !stub && !leak,
-    !r.reply ? 'пустой ответ ядра'
-      : stub ? `ЯДРО НЕ ОТВЕТИЛО — заглушка вместо ответа: «${raw.trim().slice(0, 60)}»`
-        : leak ? `В ОТВЕТЕ ЯДРА МАШИННАЯ РАЗМЕТКА (${leak}): «${raw.trim().slice(0, 60)}» — в звук она не попадёт (снимается), но это дефект ядра, а не норма`
-          : `${r.reply.length} симв.`);
+  // Вся логика вердикта — в чистой `coreTurnVerdict` (белый список + чёрный), потому что её фикстуру
+  // T0d гоняет ДО обращения к ядру: проверку, которая работает только вживую, нельзя проверить.
+  const v = coreTurnVerdict(r);
+  add('T1 ход завершён', v.ok, v.why);
 
   // T2 — уникальность имён файлов. Совпадение = следующий синтез пишет в играющий файл.
   const names = r.sentences.map((s) => s.wav);
@@ -270,6 +251,17 @@ console.log(`[T0c разметка ядра] ${markupBad.length === 0 ? '✅' : 
   (markupBad.length ? ` — ${markupBad.map(([raw, want]) => `«${raw}» → «${stripCoreMarkup(raw)}» (ждали «${want}»)`).join(' | ')}` : ''));
 if (markupBad.length) {
   console.error('Очистка разметки ядра сломана (bugs/14): в речь уйдёт мусор либо пропадёт законный текст.');
+  process.exit(1);
+}
+
+// --- T0d: ВЕРДИКТ ПО ХОДУ ЯДРА (охранник bugs/12, белый список) ---
+// Логика и её фикстура живут в `voice/turn-verdict.mjs` — рядом друг с другом, чтобы правка одной
+// без другой сразу краснела, и отдельно от бенча, чтобы их можно было проверить не запуская прогон.
+const turnBad = TURN_FIXTURE.filter(([r, want]) => coreTurnVerdict(r).ok !== want);
+console.log(`[T0d вердикт хода] ${turnBad.length === 0 ? '✅' : '❌'} ${TURN_FIXTURE.length - turnBad.length}/${TURN_FIXTURE.length}` +
+  (turnBad.length ? ` — ${turnBad.map(([r, want, what]) => `«${what}»: ждали ${want}, получили ${coreTurnVerdict(r).ok}`).join(' | ')}` : ''));
+if (turnBad.length) {
+  console.error('Вердикт по ходу ядра сломан (bugs/12): бенч снова начнёт зеленить провалившиеся ходы.');
   process.exit(1);
 }
 
