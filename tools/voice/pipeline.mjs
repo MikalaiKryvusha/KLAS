@@ -166,7 +166,11 @@ export async function runTurn({ tts, question, user, outDir, playFn, onText }) {
   await playChain;
 
   return {
-    reply: full.trim(),
+    // Человеку — очищенный текст (иначе он ВИДИТ в чате разметку, которой не слышит, — bugs/14).
+    // Охранникам — сырой: если чистить и его, детектор машинной разметки в бенче ослепнет и дефект
+    // ядра снова станет невидимым. Один источник, две роли, ни одна не подменяет другую.
+    reply: stripCoreMarkup(full.trim()),
+    rawReply: full.trim(),
     sentences,
     coreMs,
     ttfaMs: firstAudioAt === null ? null : firstAudioAt - t0,   // главная метрика (researches/12 §1)
