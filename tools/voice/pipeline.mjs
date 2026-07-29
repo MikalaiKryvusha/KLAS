@@ -29,6 +29,27 @@ export const VOICE_STYLE = '(Голосовой запрос — ответ бу
 const SENTENCE_END = /[.!?…]["»)]?\s/;
 const MIN_CHUNK_CHARS = 12;
 
+/**
+ * Смещение первой границы предложения, дающей кусок НЕ КОРОЧЕ порога; -1, если такой ещё нет.
+ *
+ * ⚠️ Читается «первая ПОДХОДЯЩАЯ», а не «первая вообще» — и в этом весь bugs/09. Прежний код брал
+ * `buf.match(SENTENCE_END)` (то есть самое РАННЕЕ совпадение) и выходил из цикла, если оно короче
+ * порога. На ответе вроде «Привет! У меня пока нет имени. Давай выберем…» самой ранней границей
+ * навсегда оставался «Привет!» (8 символов < 12), порог не преодолевался НИ НА ОДНОЙ итерации, более
+ * поздние границы не рассматривались вовсе — и весь ответ уезжал одним куском хвостом. Стриминг,
+ * ради которого нарезка и существует, молча обнулялся: TTFA становился равен полному ответу.
+ * Экспортируется, чтобы охранник в tools/voice-bench.mjs проверял нарезку детерминированно,
+ * не завися от того, что именно сегодня ответит модель.
+ */
+export function firstSentenceCut(text) {
+  const re = new RegExp(SENTENCE_END.source, 'g');
+  for (let m; (m = re.exec(text)); ) {
+    const cut = m.index + m[0].length;
+    if (cut >= MIN_CHUNK_CHARS) return cut;
+  }
+  return -1;
+}
+
 /** Токен гейтвея из конфига ядра (вне git — живёт в профиле пользователя). */
 export function gatewayToken() {
   if (!existsSync(OPENCLAW_CFG)) throw new Error(`Нет конфига ядра: ${OPENCLAW_CFG}`);
@@ -111,9 +132,8 @@ export async function runTurn({ tts, question, user, outDir, playFn, onText }) {
       full += delta;
       buf += delta;
       for (;;) {
-        const m = buf.match(SENTENCE_END);
-        if (!m || m.index + m[0].length < MIN_CHUNK_CHARS) break;
-        const cut = m.index + m[0].length;
+        const cut = firstSentenceCut(buf);
+        if (cut === -1) break;
         enqueue(buf.slice(0, cut).trim());
         buf = buf.slice(cut);
       }

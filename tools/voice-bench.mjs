@@ -37,7 +37,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { TtsDaemon } from './voice/tts-daemon.mjs';
-import { gatewayAlive, runTurn } from './voice/pipeline.mjs';
+import { firstSentenceCut, gatewayAlive, runTurn } from './voice/pipeline.mjs';
 import { acquireVoiceSession } from './voice/single-instance.mjs';
 
 const HERE = import.meta.dirname;
@@ -187,6 +187,42 @@ if (audible) {
     console.error('Дождись её конца либо гоняй бенч без звука (без --audible/--acoustic).');
     process.exit(1);
   }
+}
+
+// --- T0: НАРЕЗКА (охранник bugs/09) ---
+// Детерминированная проверка ДО обращения к ядру: нарезка по предложениям не должна зависеть от
+// того, что сегодня ответит модель, а прежний дефект был именно в ней. Разбивать ответ обязана
+// каждая граница предложения, дающая достаточный кусок, — а не только самая ранняя. На старом коде
+// первый случай давал ОДИН кусок вместо трёх, потому что «Привет!» короче порога и цикл выходил
+// навсегда: стриминг молча обнулялся, TTFA становился равен полному ответу.
+function chunk(text) {
+  const out = [];
+  let buf = text;
+  for (;;) {
+    const cut = firstSentenceCut(buf);
+    if (cut === -1) break;
+    out.push(buf.slice(0, cut).trim());
+    buf = buf.slice(cut);
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out;
+}
+// [текст, минимум кусков]. Ожидания выведены из КОНТРАКТА нарезки, а не из желаемого: короткий
+// огрызок склеивается со следующей фразой (в этом смысл порога), поэтому «Привет!» и «Да!» не дают
+// отдельного куска — они дают ПРАВО резать дальше. Первые два случая различают старую логику и
+// новую: старая на них выдавала ОДИН кусок на весь ответ.
+const CHUNK_FIXTURE = [
+  ['Привет! У меня пока нет имени. Давай выберем его вместе, если хочешь.', 2],
+  ['Да! Отлично. Теперь давай проверим, как это звучит вслух.', 2],
+  ['Три реки: Днепр, Припять и Двина. Они важны для страны.', 2],
+  ['Минск.', 1],                                    // одна короткая фраза уходит в хвост — это норма
+];
+const chunkFails = CHUNK_FIXTURE.filter(([t, min]) => chunk(t).length < min);
+console.log(`[T0 нарезка] ${chunkFails.length === 0 ? '✅' : '❌'} ${CHUNK_FIXTURE.length - chunkFails.length}/${CHUNK_FIXTURE.length}` +
+  (chunkFails.length ? ` — не режется: ${chunkFails.map(([t]) => `«${t.slice(0, 40)}…» → ${chunk(t).length} кусков`).join(' | ')}` : ''));
+if (chunkFails.length) {
+  console.error('Нарезка по предложениям сломана (bugs/09) — стриминг обнулён, TTFA = полный ответ.');
+  process.exit(1);
 }
 
 if (!(await gatewayAlive())) {
