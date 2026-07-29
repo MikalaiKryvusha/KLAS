@@ -18,6 +18,8 @@
 //   node tools/voice-talk.mjs --device "имя dshow-микрофона"   (дефолт — NVIDIA Broadcast)
 //   node tools/voice-talk.mjs --no-play           → не проигрывать ответ (тихий тест)
 //   node tools/voice-talk.mjs --voice baya        → голос Silero (дефолт eugene — выбор владельца)
+//   node tools/voice-talk.mjs --ears punct        → УШИ с пунктуацией и латиницей (bugs/10);
+//        дефолт `ru` — нынешняя модель, лучший чистый русский, но без запятых и без латиницы
 //   node tools/voice-talk.mjs --voice-en en_46    → английский диктор для латиницы (дефолт en_23,
 //        подобран измерением под eugene — bugs/11; кандидаты рядом: en_46, en_112)
 // Выход из диалога: пустая реплика (сразу два Enter) или Ctrl+C.
@@ -45,12 +47,17 @@ const voice = flag('--voice') ?? 'eugene';           // дефолт владе�
 // Английский диктор: дефолт живёт в сайдкаре (подобран измерением под `eugene`, bugs/11).
 // Флаг существует, чтобы владелец мог сравнить кандидатов УШАМИ, не трогая код: en_23 · en_46 · en_112.
 const voiceEn = flag('--voice-en');
+// Модель УШЕЙ (bugs/10). `ru` — нынешняя (34 токена: только строчная кириллица, SOTA по чистому
+// русскому). `punct` — тот же GigaAM-v3, но 257 токенов: пунктуация, заглавные, «ё» и ЛАТИНИЦА.
+// Дефолт пока `ru`: смена модели ушей — элемент стека, то есть решение владельца, а замер на
+// синтезированной фикстуре дал смешанный результат (см. bugs/10). Владелец судит своим микрофоном.
+const ears = flag('--ears') ?? 'ru';
 const play = !args.includes('--no-play');
 const sessionUser = `voice-${new Date().toISOString().slice(0, 10)}`;   // один день = одна беседа
 
 // --- УШИ: распознавание (разовый запуск; 1.3–1.7 с — резидент кандидат на Г4) ---
 function hear(wav) {
-  const r = spawnSync('node', [path.join(HERE, 'voice-hear.mjs'), wav], { encoding: 'utf8', timeout: 300_000, windowsHide: true });
+  const r = spawnSync('node', [path.join(HERE, 'voice-hear.mjs'), wav, '--model', ears], { encoding: 'utf8', timeout: 300_000, windowsHide: true });
   if (r.status !== 0) throw new Error(`УШИ упали: ${(r.stderr || '').slice(-200)}`);
   return r.stdout.trim();
 }

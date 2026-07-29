@@ -56,7 +56,7 @@ Wikipedia, searchable from the chat).
 | Long-context specialist | Qwythos-9B (Q5_K_M) — **256K context** | needle @148K ✅ — for very long documents |
 | Alt models | Qwen3.5-35B-A3B (fallback), Ornith-1.0-35B (SWE-bench 75.6), Qwen3.6-27B (64K), Gemma-4-12B (131K, multimodal) | swapped by name |
 | Assistant core | [OpenClaw](https://github.com/openclaw/openclaw) on the local models | the agent loop behind the assistant: skills, tool calls, sessions |
-| Voice (in progress) | [Silero](https://github.com/snakers4/silero-models) TTS (`v5_ru` + `v3_en`, resident) + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT via sherpa-onnx — fully offline, on CPU | KLAS speaks and hears; **switches Russian↔English inside one reply**; a turn takes ~8 s end to end |
+| Voice (in progress) | [Silero](https://github.com/snakers4/silero-models) TTS (`v5_ru` + `v3_en`, resident) + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT via sherpa-onnx — fully offline, on CPU | KLAS speaks and hears; **switches Russian↔English inside one reply, in one voice**; a turn takes ~8 s end to end |
 | Agent frontend | Zoo Code (VS Code) — local & remote | the agent in your editor |
 | Family chat | [Open WebUI](https://github.com/open-webui/open-webui) — personal accounts, private chats | a simple ChatGPT-like chat for close ones |
 | Knowledge base | kiwix (offline Wikipedia + more `.zim`) with search from chat & from the agent (MCP) | offline knowledge for people and agents |

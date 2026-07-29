@@ -12,15 +12,27 @@ import { existsSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 
-const MODEL_DIR = 'F:\\KLAS\\voice\\models\\gigaam-v3-ctc';
-const MODEL = `${MODEL_DIR}\\model.int8.onnx`;
-const TOKENS = `${MODEL_DIR}\\tokens.txt`;
+// Модель сменная: у GigaAM-v3 два выпуска с ОДИНАКОВЫМ форматом (NeMo-CTC, model.int8.onnx +
+// tokens.txt), но разными алфавитами — обычный (34 токена: только строчная кириллица) и `punct`
+// (257 токенов: латиница, знаки препинания, заглавные, «ё»). Второй нужен для смеси языков,
+// на которую пожаловался владелец (`bugs/10`). Флаг существует, чтобы обе можно было сравнить
+// на одной фикстуре, а не менять код ради каждого замера.
+const MODELS = {
+  ru: 'F:\\KLAS\\voice\\models\\gigaam-v3-ctc',            // 34 токена, SOTA по чистому русскому
+  punct: 'F:\\KLAS\\voice\\models\\gigaam-v3-ctc-punct',   // 257 токенов: латиница + пунктуация
+};
 const NUM_THREADS = 4; // как у TTS: хватает для realtime, систему не душим
 
-const wav = process.argv[2];
-if (!wav) { console.error('Использование: node tools/voice-hear.mjs <файл.wav>'); process.exit(1); }
+const argv = process.argv.slice(2);
+const modelKey = (() => { const i = argv.indexOf('--model'); return i >= 0 ? argv[i + 1] : 'ru'; })();
+const MODEL_DIR = MODELS[modelKey] ?? modelKey;   // допускаем и произвольный путь к каталогу модели
+const MODEL = `${MODEL_DIR}\\model.int8.onnx`;
+const TOKENS = `${MODEL_DIR}\\tokens.txt`;
+
+const wav = argv.find((a) => !a.startsWith('--') && a !== modelKey);
+if (!wav) { console.error('Использование: node tools/voice-hear.mjs <файл.wav> [--model ru|punct|<путь>]'); process.exit(1); }
 if (!existsSync(wav)) { console.error(`Нет файла: ${wav}`); process.exit(1); }
-if (!existsSync(MODEL)) { console.error(`Нет модели: ${MODEL} — bootstrap в plans/12`); process.exit(1); }
+if (!existsSync(MODEL)) { console.error(`Нет модели: ${MODEL} — bootstrap в plans/12 (модели: ${Object.keys(MODELS).join(', ')})`); process.exit(1); }
 
 const sherpa = require('sherpa-onnx-node');
 
