@@ -39,6 +39,15 @@
 ├── .claude/skills/<name>/SKILL.md       # 26 скиллов-ритуалов (/resume, /pause, циклы, fable-*, /experience)
 ├── .roo/ .agents/ .grok/ .cline/        # те же скиллы для Zoo Code / Codex / Grok Build / Cline (копии канона)
 ├── tools/                               # инструменты проекта и скрипты харнесса
+│   ├── voice-say.mjs voice-hear.mjs voice-talk.mjs voice-bench.mjs voice-roundtrip.mjs
+│   │                                    #   голосовой тракт: рот · уши · диалог · бенч · round-trip
+│   └── voice/                           # внутренности тракта (общий код + питон-сайдкары)
+│       ├── pipeline.mjs                 #   ОДИН конвейер хода для диалога И бенча (не копия!)
+│       ├── tts-daemon.mjs               #   Node-обёртка резидентного рта + канарейка кодировки
+│       ├── silero_daemon.py             #   резидентный двуязычный синтез + нормализация чисел/единиц
+│       ├── silero_say.py                #   разовый синтез (им пользуется TTS-провайдер ядра)
+│       ├── pitch-check.py               #   охранник единства голоса (F0 русского и английского)
+│       └── single-instance.mjs          #   замок: динамики — один потребитель
 ├── openclaw/      # конфиг агентного ядра ассистента (шаблон openclaw.json.example + README;
 │                  #   рабочая копия — ~/.openclaw/openclaw.json, вне git; план — plans/10)
 ├── plans/         # детальные планы шагов (реализация фаз MASTER_PLAN)     + README.md
@@ -66,6 +75,11 @@
 | `LLMs\LLAMACPP_MODELS\` | GGUF: `gemma-4-12b-it-UD-Q4_K_XL.gguf` (~7.4 GB), `Qwen3.6-27B-UD-Q4_K_XL.gguf` (~17.9 GB — целиком в 16 GB VRAM не влезает) | модели движка |
 | `docker-compose.yml` | сервисы: kiwix (**:8080**), homepage (:3005), caddy (:80/:443); блок anythingllm закомментирован | ⚠️ kiwix конкурирует за порт 8080 с llama-server |
 | `homepage\`, `caddy\`, `kiwixdb\` | данные/конфиги docker-сервисов | тома compose |
+| `voice\venv\` | Python-venv голосового тракта (torch + Silero) | его питоном запускаются оба сайдкара; путь зашит в `tools/voice/tts-daemon.mjs` и `tools/voice-say.mjs` |
+| `voice\models\v5_ru.pt` · `v3_en.pt` | веса Silero TTS (русская + английская) | ⚠️ `v3_en.pt` питоном не скачать — у `models.silero.ai` истёк SSL-сертификат; добыт `Invoke-WebRequest` |
+| `voice\models\gigaam-v3-ctc\` | УШИ по умолчанию (`--model ru`): NeMo-CTC, **34 токена** — только строчная кириллица | SOTA по чистому русскому, но БЕЗ пунктуации и БЕЗ латиницы (`bugs/10`) |
+| `voice\models\gigaam-v3-ctc-punct\` | УШИ-опция (`--model punct`): тот же GigaAM-v3, **257 токенов** — латиница, пунктуация, заглавные, «ё» | развёрнута 2026-07-29, **дефолтом НЕ стала** — ждёт вердикта владельца (`bugs/10`) |
+| `voice\out\` · `voice\bench\` | wav диалога и бенча (вне git) | ⚠️ **это криминалистика:** файлы переживают сессию, именно они доказали `bugs/08`. Здесь же замок `.voice-session.lock` |
 | `mcp\web-search-mcp-v0.3.2\` | MCP-сервер веб-поиска | потенциальный инструмент для локального агента |
 | `nssm\` | Non-Sucking Service Manager | кандидат для «спит, пока не позовут» (Фаза 4) |
 | `tailscale_funnel_443.bat` | внешний доступ через Tailscale Funnel | Фаза 6 (доступ близким) |
