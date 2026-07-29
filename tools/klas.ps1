@@ -22,6 +22,7 @@ $WebuiLocal = 'http://127.0.0.1:3080'               # Open WebUI (локальн
 # OpenClaw — агентное ядро ассистента (ступень 1, plans/10 + интервью 005): гейтвей строго в tailnet
 # (bind tailnet в ~/.openclaw/openclaw.json), auth token — в caddy/PASSWORD.local.txt. НЕ funnel!
 $OpenclawJs = "$env:APPDATA\npm\node_modules\openclaw\openclaw.mjs"   # энтрипоинт (npm -g)
+$GatewayLogDir = 'F:\KLAS\logs'                     # вывод гейтвея (вне git: .gitignore → logs/, *.log)
 
 # Поднять весь стек KLAS. Идемпотентно (docker up -d и funnel --bg безопасно вызывать повторно).
 function Start-KlasStack {
@@ -40,7 +41,19 @@ function Start-KlasStack {
     #    (100.x:18789, конфиг openclaw.json), в funnel НЕ публикуется. Идемпотентно: не плодим второй.
     if ((Test-Path $OpenclawJs) -and -not (Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
             Where-Object { $_.CommandLine -match 'openclaw.*gateway\s+run' })) {
-        Start-Process node -ArgumentList "`"$OpenclawJs`"",'gateway','run' -WindowStyle Hidden
+        # ⚠️ Вывод гейтвея ПЕРЕХВАТЫВАЕТСЯ в файл (bugs/15): до этого он уходил в скрытое окно, и
+        # когда 2026-07-29 процесс умер сам, от него не осталось НИ ОДНОЙ строки — сам OpenClaw в
+        # ~/.openclaw/logs/ пишет только config-audit. Имя файла несёт метку времени старта, чтобы
+        # перезапуск НЕ затирал предсмертный вывод прошлого экземпляра (перенаправление Start-Process
+        # открывает файл на перезапись). Голосовой тракт без гейтвея не работает вовсе, поэтому
+        # причина падения дороже, чем чистота папки.
+        # [TESTED: 2026-07-29 · гейтвей перезапущен этой веткой: окна нет, порт 18789 слушает,
+        #  klas.ps1 down по-прежнему находит процесс по строке команды, в .out виден баннер старта]
+        $null = New-Item -ItemType Directory -Force -Path $GatewayLogDir
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        Start-Process node -ArgumentList "`"$OpenclawJs`"",'gateway','run' -WindowStyle Hidden `
+            -RedirectStandardOutput "$GatewayLogDir\gateway-$stamp.out.log" `
+            -RedirectStandardError  "$GatewayLogDir\gateway-$stamp.err.log"
     }
 }
 
