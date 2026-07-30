@@ -33,6 +33,10 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+// Расшифровка ушей идёт в CSV, который Piper читает питоновским csv.reader с ДЕФОЛТНЫМ
+// quotechar `"`. Кавычка в начале текста открывает закавыченное поле и склеивает строки файла
+// в одну реплику — молча, до самого OOM на матрице внимания (bugs/18).
+import { sanitizeText, verifyMetadata } from './piper-dataset-guard.mjs';
 
 const run = promisify(execFile);
 const argv = process.argv.slice(2);
@@ -106,7 +110,9 @@ for (const seg of segments.slice(0, LIMIT)) {
   const path = join(WAVS, name);
   await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-ss', String(seg.ss), '-t', String(seg.len),
     '-i', SRC, '-ac', '1', '-ar', String(SR), '-y', path]);
-  const text = (await hear(path)).replace(/\s+/g, ' ').trim();
+  // sanitizeText снимает символы, специальные для csv.reader (`"`, `|`, перевод строки).
+  // Уши с моделью `punct` умеют выдавать прямые кавычки — именно так родился bugs/18.
+  const text = sanitizeText(await hear(path));
   const cps = text.length / seg.len;
   if (text.length < MIN_CHARS || cps < CPS_LO || cps > CPS_HI) {
     rmSync(path, { force: true });
@@ -118,7 +124,19 @@ for (const seg of segments.slice(0, LIMIT)) {
   if (n % 100 === 0) console.log(`  ...${n} реплик готово (отбраковано ${skipped})`);
 }
 
-writeFileSync(join(OUT, 'metadata.csv'), rows.join('\n') + '\n', 'utf8');
+const csvPath = join(OUT, 'metadata.csv');
+writeFileSync(csvPath, rows.join('\n') + '\n', 'utf8');
+
+// Охранник на выходе: корпус, который Piper разберёт НЕ так, как мы записали, лучше поймать
+// здесь, чем через час обучения в виде «CUDA out of memory» (bugs/18).
+const check = verifyMetadata(csvPath);
+if (!check.ok) {
+  console.error(`\n⛔ КОРПУС НЕ ПРОШЁЛ ОХРАННИКА: проблем ${check.problems.length}`);
+  for (const p of check.problems) console.error(`   строка ${p.row} · ${p.kind} · ${p.line.slice(0, 100)}`);
+  process.exit(1);
+}
+console.log(`\nохранник корпуса: ${check.rows} строк, проблем 0`);
+
 const totalSec = segments.slice(0, LIMIT).reduce((a, s) => a + s.len, 0);
 console.log(`\nГОТОВО: ${rows.length} реплик, отбраковано ${skipped}`);
 console.log(`общая длительность корпуса ≈ ${(totalSec / 60).toFixed(1)} мин`);
