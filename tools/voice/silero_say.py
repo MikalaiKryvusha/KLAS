@@ -72,7 +72,17 @@ def main() -> None:
     model.to(torch.device("cpu"))
     t_load = time.perf_counter()
 
-    audio = model.apply_tts(text=text, speaker=voice, sample_rate=SAMPLE_RATE)
+    # ⚠️ НОРМАЛИЗАЦИЯ (найдено 2026-07-30). Этот путь — TTS-провайдер ЯДРА (`tts-local-cli` →
+    # `voice-say.mjs` → сюда), и он произносил СЫРОЙ текст: без разворота чисел («Температура 20
+    # градусов» звучало как «температура градусов» — `bugs/13`), без единиц, без транслитерации.
+    # Непронормализованных живых путей было ДВА, а не один: резидентный демон и вот этот.
+    # Один слой на оба (`text_norm`), режим тот же 'full' — Silero одноязычный.
+    sys.path.insert(0, str(Path(__file__).parent))
+    from text_norm import normalize
+    spoken = normalize(text, translit="full")
+    if spoken != text:
+        log({"stage": "normalized", "spoken": spoken})
+    audio = model.apply_tts(text=spoken, speaker=voice, sample_rate=SAMPLE_RATE)
     t_tts = time.perf_counter()
 
     # WAV 16-бит моно — пишем стандартной библиотекой (без лишних зависимостей)
