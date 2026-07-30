@@ -71,7 +71,10 @@ const l4 = say('Способ четвёртый. Мультиязычная мо
 
 // Способ 3 — наш боевой тракт как есть
 const tts = new TtsDaemon({ voice: 'eugene' });
-await tts.ready();
+// Контракт демона требует отличать 'ready' от 'dead'/'encoding-broken': на сломанной кодировке
+// синтез «работает», но владелец сравнивал бы в прослушке моджибейк, а не способы (ревизия 2026-07-31)
+const rdy = await tts.ready();
+if (rdy?.stage !== 'ready') { console.error(`РОТ не готов (${rdy?.stage}) — сравнение недостоверно, выходим`); process.exit(1); }
 const w3 = path.join(OUT, 'way3_current.wav');
 const r3 = await tts.say(FRASE_LAT, w3);
 tts.stop();

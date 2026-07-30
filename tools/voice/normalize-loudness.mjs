@@ -59,7 +59,9 @@ async function measure(file) {
     '-af', `loudnorm=I=${TARGET_LUFS}:TP=${TRUE_PEAK}:LRA=${LRA}:print_format=json`,
     '-f', 'null', '-'];
   const { stderr } = await run('ffmpeg', args, { maxBuffer: 1 << 24 }).catch((e) => ({ stderr: e.stderr ?? '' }));
-  const m = stderr.match(/\{[\s\S]*?\}/);
+  // ПОСЛЕДНЯЯ пара скобок, а не первая: первый проход идёт без -loglevel error, и перед JSON
+  // loudnorm в stderr лежит дамп метаданных входа — `{` в ID3-теге mp3 ломала парс (ревизия 2026-07-31)
+  const m = [...stderr.matchAll(/\{[\s\S]*?\}/g)].pop();
   if (!m) throw new Error(`loudnorm не отдал измерение для ${file}`);
   return JSON.parse(m[0]);
 }
@@ -92,3 +94,6 @@ for (const file of files) {
   }
 }
 console.log(`=== выровнено ${ok} из ${files.length}, цель ${TARGET_LUFS} LUFS → ${OUT_DIR} ===`);
+// Код выхода обязан отражать итог: раньше «выровнено 0 из N» завершалось нулём, и вызывающий
+// скрипт/автоцикл считал нормализацию успешной (ревизия 2026-07-31)
+process.exit(ok === files.length ? 0 : 1);

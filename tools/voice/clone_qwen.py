@@ -92,8 +92,11 @@ for name, wav, txt in CONDITIONS:
     if wav.endswith(".wav"):
         checked.append((name, wav, text, check_ref_pair(wav, text, engine="qwen")))
     else:
-        # тот же инвариант, что в check_ref_pair, для формата, который он не читает
-        assert 8.0 <= cps <= 22.0, f"пара {name} не сходится: {cps:.1f} симв/с (bugs/16)"
+        # тот же инвариант, что в check_ref_pair, для формата, который он не читает.
+        # raise, а не assert: `python -O` снимает assert'ы, и охранник пары исчезал бы молча —
+        # ровно тот класс дефекта, ради которого написан ref_pair (ревизия 2026-07-31)
+        if not 8.0 <= cps <= 22.0:
+            raise ValueError(f"пара {name} не сходится: {cps:.1f} симв/с (bugs/16)")
         checked.append((name, wav, text, {"ref_audio_s": round(dur, 2), "ref_chars": n, "cps": round(cps, 1)}))
 
 os.makedirs(OUT, exist_ok=True)
@@ -144,8 +147,17 @@ for name, wav, text, pair in checked:
                        "ref": pair, "synth_s": round(el, 3), "audio_s": round(dur, 3),
                        "rtf": round(el / dur, 4)})
 
-with open(os.path.join(OUT, f"report_qwen_{CONDITIONS[0][0]}.json"), "w", encoding="utf-8") as f:
+# Частичный прогон (ONLY_TAGS) ПОДМЕШИВАЕТ записи в существующий отчёт, а не перезаписывает его
+# подмножеством — иначе после точечного пересчёта терялись данные полного прогона (ревизия 2026-07-31).
+report_path = os.path.join(OUT, f"report_qwen_{CONDITIONS[0][0]}.json")
+if _only and os.path.exists(report_path):
+    with open(report_path, encoding="utf-8") as f:
+        old = {i["name"]: i for i in json.load(f).get("items", [])}
+    old.update({i["name"]: i for i in report})
+    report = list(old.values())
+with open(report_path, "w", encoding="utf-8") as f:
     json.dump({"items": report,
-               "vram_peak_gb": round(torch.cuda.max_memory_allocated() / 1024**3, 2)},
+               "vram_peak_gb": round(torch.cuda.max_memory_allocated() / 1024**3, 2)
+               if torch.cuda.is_available() else 0},
               f, ensure_ascii=False, indent=2)
 print("\n=== ГОТОВО ===", flush=True)

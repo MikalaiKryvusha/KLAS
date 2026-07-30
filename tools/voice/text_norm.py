@@ -61,24 +61,37 @@ def _under_1000(n: int, feminine: bool):
     return out
 
 
-def number_to_ru_words(num: int) -> str:
-    if num == 0:
-        return "ноль"
+def _int_words(n: int, feminine: bool):
+    """Целое ≥0 → список слов. `feminine` касается последней группы <1000 («одна целая», «две десятых»).
+
+    Ревизия 2026-07-31: раньше дробное правило звало _under_1000 напрямую, и «1024.5 МБ»
+    роняло весь normalize() с IndexError (_HUNDREDS[10]) — живой рот молчал на любой дроби
+    с целой частью ≥ 1000. Теперь ЛЮБОЕ целое идёт одной дорогой через масштабы, а числа
+    выше квадриллионов читаются поцифрово — краш невозможен по построению.
+    """
+    if n == 0:
+        return ["ноль"]
+    if n >= 10 ** 18:                     # выше названных масштабов — поцифрово, но никогда не падаем
+        return [(_ONES_M[int(d)] or "ноль") for d in str(n)]
     parts = []
-    if num < 0:
-        parts.append("минус")
-        num = -num
     for scale, (forms, fem) in (
+        (10 ** 15, (("квадриллион", "квадриллиона", "квадриллионов"), False)),
+        (10 ** 12, (("триллион", "триллиона", "триллионов"), False)),
         (10 ** 9, (("миллиард", "миллиарда", "миллиардов"), False)),
         (10 ** 6, (("миллион", "миллиона", "миллионов"), False)),
         (10 ** 3, (("тысяча", "тысячи", "тысяч"), True)),
     ):
-        if num >= scale:
-            chunk = num // scale
+        if n >= scale:
+            chunk = n // scale
             parts += _under_1000(chunk, fem) + [_plural(chunk, forms)]
-            num %= scale
-    if num:
-        parts += _under_1000(num, False)
+            n %= scale
+    if n:
+        parts += _under_1000(n, feminine)
+    return parts
+
+
+def number_to_ru_words(num: int) -> str:
+    parts = (["минус"] if num < 0 else []) + _int_words(abs(num), False)
     return " ".join(p for p in parts if p)
 
 
@@ -92,14 +105,14 @@ def _decimal_to_words(m) -> str:
     w = int(whole)
     f = int(frac)
     digits = len(frac)
-    whole_words = " ".join(_under_1000(w, True)) if w else "ноль"
+    whole_words = " ".join(_int_words(w, True))
     whole_tail = _plural(w, ("целая", "целых", "целых"))
     if digits in _FRACTION_NAMES:
         one, many = _FRACTION_NAMES[digits]
         frac_tail = _plural(f, (one, many, many))
     else:                                    # разряд глубже тысячных не называем — читаем цифрами
         return f"{whole_words} {whole_tail} " + " ".join(_ONES_M[int(d)] or "ноль" for d in frac)
-    frac_words = " ".join(_under_1000(f, True)) if f else "ноль"
+    frac_words = " ".join(_int_words(f, True))
     return f"{whole_words} {whole_tail} {frac_words} {frac_tail}"
 
 
@@ -107,9 +120,14 @@ _DECIMAL = re.compile(r"\b(\d+)[.,](\d+)\b")
 
 
 def digits_to_words(text: str) -> str:
-    """Дроби разворачиваем ПЕРВЫМИ, иначе целочисленное правило разрежет их пополам."""
+    """Дроби разворачиваем ПЕРВЫМИ, иначе целочисленное правило разрежет их пополам.
+
+    Минус берём только когда слева НЕ цифра: дефис между числами — это дата или диапазон
+    («2026-07-31», «5-10 минут»), и раньше он читался «минус», а слова склеивались встык
+    («шестьминус семьминус»). Дефис остаётся в тексте разделителем — движок даст короткую паузу.
+    """
     text = _DECIMAL.sub(_decimal_to_words, text)
-    return re.sub(r"-?\d+", lambda m: number_to_ru_words(int(m.group())), text)
+    return re.sub(r"(?<!\d)-?\d+", lambda m: number_to_ru_words(int(m.group())), text)
 
 
 # ---------------------------------------------------------------- единицы
@@ -131,6 +149,8 @@ _UNIT_WORDS = [
     (r"\bсм\b", " сантиметров"),
     (r"\bмм\b", " миллиметров"),
     (r"\bкг\b", " килограммов"),
+    # «т.ч.» ДО правила «ч.», иначе «в т.ч.» превращалось в «в т. часов» (ревизия 2026-07-31)
+    (r"\bт\.ч\.", " том числе"),
     (r"\bч\.", " часов"),
     (r"\bмин\b", " минут"),
     (r"\bсек\b", " секунд"),
@@ -139,13 +159,17 @@ _UNIT_WORDS = [
     (r"\bт\.п\.", "тому подобное"),
 ]
 _HAS_NUMBER_BEFORE = re.compile(r"\d\s*$")
+# Развороты, которым число слева НЕ требуется: устойчивые сокращения и «%».
+# Раньше это решала проверка «есть точка в совпадении», и она же ломала «ч.» без числа
+# («в т.ч.» → «в т. часов») — условие было шире своего назначения (ревизия 2026-07-31).
+_ALWAYS_EXPAND = {r"\bт\.ч\.", r"\bт\.е\.", r"\bт\.д\.", r"\bт\.п\.", r"%"}
 
 
 def expand_units(text: str) -> str:
     for pattern, word in _UNIT_WORDS:
-        def repl(m, word=word):
+        def repl(m, word=word, pattern=pattern):
             before = text[:m.start()]
-            return word if _HAS_NUMBER_BEFORE.search(before) or "." in m.group() or "%" in m.group() else m.group()
+            return word if pattern in _ALWAYS_EXPAND or _HAS_NUMBER_BEFORE.search(before) else m.group()
         text = re.sub(pattern, repl, text)
     return re.sub(r"\s{2,}", " ", text)
 
@@ -158,13 +182,15 @@ _CODE_RULES = [
     (r"\bf\s*\(\s*x\s*\)", "эф от икс"),                 # частая форма записи функции
     (r"(?<=\s)-([a-zA-Z])\b", r"ключ \1"),               # флаг вида -m
     (r"--([a-zA-Z-]+)", r"ключ \1"),                     # длинный флаг
+    # Стрелки ДО правила «=»: иначе «=>» съедается как «равно >» и в речи повисает мусорный знак
+    # (ревизия 2026-07-31 — правило было мёртвым с рождения).
+    (r"\s*->\s*", " стрелка "),
+    (r"\s*=>\s*", " стрелка "),
     (r"\s*==\s*", " равно равно "),
     (r"\s*=\s*", " равно "),
     (r"\s*\+\s*", " плюс "),
     (r"(?<=\d)\s*\*\s*(?=\d)", " умножить на "),
     (r"(?<=\d)\s*/\s*(?=\d)", " делить на "),
-    (r"\s*->\s*", " стрелка "),
-    (r"\s*=>\s*", " стрелка "),
     (r"[\"«»']", " "),                                    # кавычки не звучат — содержимое остаётся
     # ПОЯСНИТЕЛЬНОЕ ДВОЕТОЧИЕ убираем: движок читает его как разделитель и вставляет паузу.
     # Владелец 2026-07-30: «не делаем паузы между "работает" и "пайтон скрипт"» — там в тексте
@@ -372,6 +398,10 @@ if __name__ == "__main__":
         "Видеокарта RTX 5070 Ti заняла 11.4 ГБ из 16, температура 62 °C, скорость 115 КБ/с, до встречи осталось 15 минут.",
         'Выполните команду git commit -m "fix voice", затем npm run build. Функция f(x) = 2x при x от 1 до 5 вернёт 10.',
         "Загрузка 87%, осталось 2.5 мин.",
+        # Случаи ревизии 2026-07-31 — каждый ловил живой дефект:
+        # дробь с целой частью ≥1000 роняла normalize() IndexError'ом (демон молчал на реплике);
+        # дата/диапазон читались «минус» со склейкой слов; «в т.ч.» звучало «в т. часов».
+        "Файл занял 1024.5 МБ, свободно 2199023255552 байт, релиз 2026-07-31, подожди 5-10 минут, в т.ч. на диске.",
     ]
     CASES.append("Эта технология называется machine learning, и она уже работает: "
                  "Python-скрипт обучает модель, а результат сохраняется в файл model.onnx.")

@@ -39,7 +39,14 @@ def f0_median(path: str):
         sr = w.getframerate()
         n = w.getnframes()
         ch = w.getnchannels()
+        sw = w.getsampwidth()
         raw = w.readframes(n)
+    # Читаем как int16 — и обязаны проверить, что файл ДЕЙСТВИТЕЛЬНО int16: чужие записи дикторов
+    # бывают 24-битными/float, frombuffer тогда даёт шум, а F0 — правдоподобное ложное число,
+    # по которому сортируется кастинг. Тихая порча хуже отказа (ревизия 2026-07-31).
+    if sw != 2:
+        raise SystemExit(f"⛔ {path}: sampwidth={sw * 8} бит, поддерживается только 16-бит PCM — "
+                         f"переконвертируй: ffmpeg -i <файл> -sample_fmt s16 out.wav")
     x = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
     if ch > 1:
         x = x.reshape(-1, ch).mean(axis=1)

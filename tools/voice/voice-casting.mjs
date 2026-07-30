@@ -118,7 +118,8 @@ function piperSay(voice) {
 async function sileroSay(voice) {
   const tts = new TtsDaemon({ voice });
   const ready = await tts.ready();
-  if (ready?.stage === 'encoding-broken') { tts.stop(); return null; }
+  // `!== 'ready'`: мёртвый сайдкар попадал в кастинг «рабочим голосом» с нулём файлов (ревизия 2026-07-31)
+  if (ready?.stage !== 'ready') { tts.stop(); return null; }
   return { say: async (text, wav) => Boolean((await tts.say(text, wav))?.ok), stop: () => tts.stop() };
 }
 

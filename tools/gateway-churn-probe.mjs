@@ -61,17 +61,26 @@ async function turn(sessionKey, question) {
     if (!res.ok) return { ok: false, ms: performance.now() - t0, error: `HTTP ${res.status}` };
     const dec = new TextDecoder();
     let text = '', finishReason = null;
+    const handleLine = (line) => {
+      if (!line.startsWith('data: ')) return;
+      const p = line.slice(6).trim();
+      if (p === '[DONE]') return;
+      let e; try { e = JSON.parse(p); } catch { return; }
+      const fr = e.choices?.[0]?.finish_reason;
+      if (fr) finishReason = fr;
+      text += e.choices?.[0]?.delta?.content ?? '';
+    };
+    // Хвост между чанками: строку `data:`, разрезанную границей чанка, прежний код терял молча —
+    // тот же дефект, что в pipeline.mjs (ревизия 2026-07-31). [NOT-TESTED]
+    let sse = '';
     for await (const chunk of res.body) {
-      for (const line of dec.decode(chunk, { stream: true }).split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const p = line.slice(6).trim();
-        if (p === '[DONE]') continue;
-        let e; try { e = JSON.parse(p); } catch { continue; }
-        const fr = e.choices?.[0]?.finish_reason;
-        if (fr) finishReason = fr;
-        text += e.choices?.[0]?.delta?.content ?? '';
-      }
+      sse += dec.decode(chunk, { stream: true });
+      const lines = sse.split('\n');
+      sse = lines.pop();
+      for (const line of lines) handleLine(line);
     }
+    sse += dec.decode();
+    if (sse) handleLine(sse);
     return { ok: true, ms: performance.now() - t0, finishReason, chars: text.trim().length };
   } catch (e) {
     return { ok: false, ms: performance.now() - t0, error: String(e.message || e) };
@@ -97,6 +106,10 @@ if (LOAD) {
 }
 const stopLoad = () => { for (const p of loaders) { try { p.kill(); } catch { /* уже мёртв */ } } };
 process.on('exit', stopLoad);
+// Дефолтный SIGINT завершает Node БЕЗ хуков 'exit': Ctrl+C оставлял N−1 вечных CPU-грелок
+// `while(true)` сиротами — стенд, меряющий голодание цикла по CPU, сам устраивал голодание
+// следующим замерам (ревизия 2026-07-31; тот же приём — в single-instance.mjs).
+process.on('SIGINT', () => { stopLoad(); process.exit(130); });
 
 console.log(`=== СТЕНД СМЕНЫ СЕССИЙ (bugs/15) === ходов: ${N} · режим: ${SAME_SESSION ? 'ОДНА сессия (контроль)' : 'НОВАЯ сессия на каждый ход'}${LOAD ? ' · CPU ЗАГРУЖЕН' : ''}`);
 console.log(`процессов гейтвея до старта: ${gatewayProcessCount()}\n`);

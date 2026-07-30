@@ -54,6 +54,12 @@ if (!SRC || !OUT) {
   console.error('Использование: node tools/voice/build-piper-dataset.mjs <исходник> <каталог> [--min 2] [--max 12] [--limit N]');
   process.exit(1);
 }
+// Флаг без значения давал Number(undefined)=NaN, все сравнения с NaN — false, и сборщик молча
+// отдавал 0 сегментов «успешно» (ревизия 2026-07-31)
+if ([MIN_S, MAX_S, LIMIT].some(Number.isNaN)) {
+  console.error('⛔ у --min/--max/--limit нет числового значения');
+  process.exit(1);
+}
 
 const WAVS = join(OUT, 'wav');
 mkdirSync(WAVS, { recursive: true });
@@ -104,7 +110,7 @@ for (const p of ps) {
 console.log(`отрезков ${MIN_S}–${MAX_S} с: ${segments.length}`);
 
 const rows = [];
-let n = 0, skipped = 0;
+let n = 0, skipped = 0, acceptedSec = 0;
 for (const seg of segments.slice(0, LIMIT)) {
   const name = `utt_${String(n).padStart(5, '0')}.wav`;
   const path = join(WAVS, name);
@@ -120,6 +126,7 @@ for (const seg of segments.slice(0, LIMIT)) {
     continue;
   }
   rows.push(`${name}|${text}`);
+  acceptedSec += seg.len;
   n++;
   if (n % 100 === 0) console.log(`  ...${n} реплик готово (отбраковано ${skipped})`);
 }
@@ -137,7 +144,8 @@ if (!check.ok) {
 }
 console.log(`\nохранник корпуса: ${check.rows} строк, проблем 0`);
 
-const totalSec = segments.slice(0, LIMIT).reduce((a, s) => a + s.len, 0);
+// Только ПРИНЯТЫЕ реплики: раньше сумма шла по всем сегментам до отбраковки, владелец читал
+// завышенные минуты и решал «материала хватает» по неверному числу (ревизия 2026-07-31)
 console.log(`\nГОТОВО: ${rows.length} реплик, отбраковано ${skipped}`);
-console.log(`общая длительность корпуса ≈ ${(totalSec / 60).toFixed(1)} мин`);
+console.log(`общая длительность корпуса ≈ ${(acceptedSec / 60).toFixed(1)} мин`);
 console.log(`metadata.csv → ${join(OUT, 'metadata.csv')}`);

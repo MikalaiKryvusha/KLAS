@@ -42,7 +42,9 @@ if [ -n "$free_gb" ] && [ "$free_gb" -lt "$MIN_FREE_GB" ]; then
   echo "   Один прогон съедает до 9.3 ГБ чекпойнтами, и переполнение C: ЛОМАЕТ ВЕСЬ ДИСТРИБУТИВ,"
   echo "   а не просто останавливает обучение."
   echo "   Освободить: find /opt/piper_train/vihrov/lightning_logs -name '*.ckpt' -delete"
-  echo "   Вернуть место Windows: wsl --shutdown, затем wsl --manage Ubuntu --set-sparse true"
+  echo "   Вернуть место Windows: выйти из Docker Desktop → wsl --shutdown → diskpart:"
+  echo "   attach vdisk readonly / compact vdisk (см. STATUS.md 2026-07-31; --set-sparse"
+  echo "   Microsoft отключила из-за риска повреждения данных — НЕ применять)"
   exit 2
 fi
 # ─────────────────────────────────────────────────────────────────────────────
@@ -62,6 +64,11 @@ date -Is | tee -a "$LOG"
 # файловую систему в ночь на 2026-07-31.
 FLOOR_GB=12
 (
+  # Сабшелл наследует `set -euo pipefail`, и один транзиентный отказ `df` (9p/drvfs подвисает
+  # ровно под нагрузкой обучения) убивал сторожа МОЛЧА — обучение продолжало есть диск без
+  # охраны, строка «[ -z "$now" ] && continue» была недостижима (ревизия 2026-07-31).
+  # Сторожу выживание важнее строгости: снимаем -e/pipefail внутри.
+  set +e +o pipefail
   while sleep 60; do
     pgrep -f train_piper.py > /dev/null || exit 0        # обучение кончилось — сторож не нужен
     now=$(df -BG --output=avail /mnt/c 2>/dev/null | tail -1 | tr -dc '0-9')

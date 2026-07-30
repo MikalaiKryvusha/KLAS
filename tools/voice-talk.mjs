@@ -77,11 +77,20 @@ async function recordPushToTalk(outWav) {
   await ask('Enter — НАЧАТЬ запись (пустая реплика позже = выход)… ');
   const ff = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'dshow',
     '-i', `audio=${device}`, '-ac', '1', '-ar', '16000', outWav], { windowsHide: true });
+  // Обвязка ffmpeg (ревизия 2026-07-31): 'error' без слушателя РОНЯЛ весь диалог при отсутствии
+  // ffmpeg; подписка на 'close' ПОСЛЕ остановки висла навсегда, если ffmpeg умер сразу (занятый
+  // микрофон); stderr никто не читал — причина отказа устройства была невидима человеку.
+  let ffErr = '';
+  ff.stderr?.on('data', (d) => { ffErr += d; });
+  ff.on('error', (e) => { ffErr += `\nspawn: ${e.message}`; });   // после 'error' Node всё равно эмитит 'close'
+  ff.stdin?.on('error', () => { /* EPIPE в окно смерти ffmpeg — причина уже в ffErr */ });
+  const closed = new Promise((res) => ff.on('close', res));      // подписка ДО остановки
   const t0 = performance.now();
   await ask('ЗАПИСЬ ИДЁТ — Enter, чтобы ЗАКОНЧИТЬ… ');
-  ff.stdin.write('q');   // штатная остановка ffmpeg — файл закрывается корректно
-  await new Promise((res) => ff.on('close', res));
+  try { ff.stdin.write('q'); } catch { /* уже мёртв */ }         // штатная остановка ffmpeg
+  await closed;
   rl.close();
+  if (ffErr.trim()) console.error(`ffmpeg: ${ffErr.trim().slice(0, 400)}`);
   return (performance.now() - t0) / 1000;
 }
 
@@ -153,7 +162,10 @@ try {
     for (;;) {
       const wav = path.join(OUT_DIR, `talk-input-${Date.now()}.wav`);
       const sec = await recordPushToTalk(wav);
-      if (sec < 0.6 || !existsSync(wav)) { rmSync(wav, { force: true }); console.log('Пустая реплика — выхожу. Пока!'); break; }
+      if (sec < 0.6) { rmSync(wav, { force: true }); console.log('Пустая реплика — выхожу. Пока!'); break; }
+      // Долгая запись БЕЗ файла — это отказ записи (микрофон/диск/ffmpeg), а не выбор человека:
+      // раньше тракт вежливо «прощался», маскируя поломку под интент (ревизия 2026-07-31)
+      if (!existsSync(wav)) { console.error('⛔ Запись шла, а файла нет — отказ записи, см. stderr ffmpeg выше. Пробуем ещё раз (выход — короткий Enter).'); continue; }
       try { await turn(tts, { wav }); } catch (e) { console.error(String(e.message || e)); }
       rmSync(wav, { force: true });
     }

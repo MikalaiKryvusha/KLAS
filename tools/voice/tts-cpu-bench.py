@@ -36,7 +36,9 @@ import sys
 import time
 
 # ⛔ ДО импорта torch: прячем видеокарту, иначе движок молча уйдёт на GPU и замерит не то.
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+# Именно присваивание, НЕ setdefault: в окружении WSL обычно уже стоит CUDA_VISIBLE_DEVICES=0,
+# и setdefault его не перебивал — «CPU-замер» молча шёл на GPU (ревизия 2026-07-31).
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import soundfile as sf  # noqa: E402
 import torch  # noqa: E402
@@ -65,7 +67,11 @@ args = p.parse_args()
 # нас интересует не качество (его судит владелец), а цена секунды речи.
 PHRASE = "Добрый вечер, Николай. Системы KLAS в порядке, я к вашим услугам."
 
-print(f"=== устройство: {'CUDA ВИДНА — ЗАМЕР НЕВЕРЕН!' if torch.cuda.is_available() else 'CPU (видеокарта скрыта)'}")
+# Охранник обязан ОСТАНАВЛИВАТЬ, а не предупреждать: строка «ЗАМЕР НЕВЕРЕН» среди прочего
+# вывода не мешала числам GPU попасть в решение о резидентном демоне (ревизия 2026-07-31).
+if torch.cuda.is_available():
+    sys.exit("⛔ CUDA видна несмотря на CUDA_VISIBLE_DEVICES='' — CPU-замер невозможен, выходим (код 2)")
+print("=== устройство: CPU (видеокарта скрыта)")
 print(f"=== потоков torch: {torch.get_num_threads()}   ядер: {os.cpu_count()}")
 
 # ГЕЙТ: пара «эталонный звук ↔ его текст» проверяется ДО загрузки модели (bugs/16).

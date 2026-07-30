@@ -50,7 +50,9 @@ function atCommonRate(wavIn) {
 // Сторона B — наш нынешний тракт, как он звучит в бою (резка по алфавиту, два диктора)
 for (const b of BLOCKS.filter((x) => x.silero)) {
   const tts = new TtsDaemon({ voice: b.silero });
-  await tts.ready();
+  // См. контракт ready(): 'encoding-broken' — синтез «работает», но выдаёт мусор в прослушку (ревизия 2026-07-31)
+  const rdy = await tts.ready();
+  if (rdy?.stage !== 'ready') { console.error(`РОТ не готов (${rdy?.stage}) — сторона B пропущена`); tts.stop(); continue; }
   b.files = [];
   for (const [tag, text] of TEXTS) {
     const f = `cur_${b.silero}_${tag}.wav`;

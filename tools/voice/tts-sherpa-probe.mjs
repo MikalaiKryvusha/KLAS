@@ -85,8 +85,10 @@ for (const [tag, text] of PHRASES) {
 if (!onlySherpa) {
   const silero = new TtsDaemon({ voice: 'eugene' });
   const ready = await silero.ready();
-  if (ready?.stage === 'encoding-broken') {
-    console.error('[silero] канарейка кодировки красная — сравнение недостоверно, см. bugs/08');
+  // `!== 'ready'`, а не только encoding-broken: мёртвый сайдкар (stage:'dead') раньше проходил
+  // как рабочий движок и портил сравнение шумом отказов (ревизия 2026-07-31)
+  if (ready?.stage !== 'ready') {
+    console.error(`[silero] РОТ не готов (${ready?.stage}) — сравнение недостоверно, см. bugs/08`);
   } else {
     for (const [tag, text] of PHRASES) {
       const out = path.join(OUT_DIR, `silero_${tag}.wav`);

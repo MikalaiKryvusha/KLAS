@@ -38,6 +38,14 @@ export class TtsDaemon {
     this.voiceEn = voiceEn;
     this.#readyPromise = new Promise((res) => { this.#readyResolve = res; });
     this.#proc = spawn(PY, [SIDECAR], { windowsHide: true });
+    // 'error' обязателен: при отсутствии venv spawn эмитит 'error' (ENOENT), а НЕ 'exit' —
+    // без слушателя Node ронял вызывающего сырым «Unhandled 'error' event» вместо честного
+    // stage:'dead' (ревизия 2026-07-31). То же для stdin: EPIPE в окно смерти питона.
+    this.#proc.on('error', (e) => {
+      this.#readyResolve({ stage: 'dead', code: e.code ?? null, error: e.message });
+      for (const resolve of this.#pending.splice(0)) resolve({ ok: false, error: `РОТ не запустился: ${e.message}` });
+    });
+    this.#proc.stdin.on('error', () => { /* смерть питона обрабатывает 'exit'/'error' процесса */ });
     this.#proc.stderr.resume();   // тайминги/варнинги питона нам в диалоге не нужны
 
     readline.createInterface({ input: this.#proc.stdout }).on('line', (line) => {

@@ -196,8 +196,18 @@ def split_by_script(text: str):
 def ensure_en_model() -> Path:
     local = MODELS_DIR / "v3_en.pt"
     if not local.exists():
+        # Во временное имя + rename после успеха: оборванная закачка (рвущийся VPN — известное
+        # состояние) оставляла битый v3_en.pt, который exists() вечно принимал за модель,
+        # и каждый запуск падал на PackageImporter без самолечения (ревизия 2026-07-31).
+        tmp = MODELS_DIR / "v3_en.pt.part"
         log({"stage": "download", "model": "v3_en", "url": EN_MODEL_URL})
-        urllib.request.urlretrieve(EN_MODEL_URL, local)
+        try:
+            urllib.request.urlretrieve(EN_MODEL_URL, tmp)
+            tmp.replace(local)
+        except Exception:
+            if tmp.exists():
+                tmp.unlink()
+            raise
     return local
 
 

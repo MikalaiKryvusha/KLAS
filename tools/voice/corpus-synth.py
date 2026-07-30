@@ -13,8 +13,13 @@
 #     расхождение текста и звука;
 #   * модель грузится ОДИН раз, протокол JSON не нужен.
 #
-# На выходе — раскладка LJSpeech (её понимают все обучалки VITS/Piper):
-#   dataset/wavs/000001.wav …   dataset/metadata.csv строки «000001|текст|текст»
+# На выходе — раскладка, которую ЖДЁТ НАШ ОБУЧАТЕЛЬ train_piper.py (ревизия 2026-07-31: раньше
+# писали «LJSpeech: wavs/ + 000001|текст|текст», а train_piper читает `wav/` и «имя.wav|текст» —
+# датасет этого конвейера обучатель не принял бы; формат сверен с живым /opt/dataset_vihrov):
+#   dataset/wav/utt_000001.wav …   dataset/metadata.csv строки «utt_000001.wav|текст»
+#
+# ⚠️ Частота: Silero умеет только 8000/24000/48000 — 22050 (дефолт train_piper) он не отдаст.
+#   Обучение на таком корпусе запускать с `--sr 24000`.
 #
 # Запуск (Windows, venv голосового тракта):
 #   F:\KLAS\voice\venv\Scripts\python.exe tools/voice/corpus-synth.py \
@@ -53,10 +58,13 @@ def main() -> int:
     a = ap.parse_args()
 
     out = Path(a.out)
-    wavs = out / "wavs"
+    wavs = out / "wav"                        # контракт train_piper.py (--data.audio_dir <dataset>/wav)
     wavs.mkdir(parents=True, exist_ok=True)
 
     lines = [s.strip() for s in Path(a.texts).read_text(encoding="utf-8").splitlines() if s.strip()]
+    # Предусловие разбора (bugs/18, тот же канон, что piper-dataset-guard): в тексте корпуса не должно
+    # быть `"` (quotechar склеивает строки csv.reader), `|` (лишние колонки) и переводов строк.
+    lines = [" ".join(s.replace('"', "").replace("|", " ").split()) for s in lines]
     if a.limit:
         lines = lines[: a.limit]
     print(f"фраз к синтезу: {len(lines)} · голос: {a.voice} · частота: {SAMPLE_RATE}", file=sys.stderr)
@@ -66,34 +74,38 @@ def main() -> int:
     model.to(torch.device("cpu"))
     print(f"модель загружена за {time.perf_counter() - t0:.1f} с", file=sys.stderr)
 
-    meta = []
+    done = 0
     total_audio = 0.0
     failed = 0
     t_start = time.perf_counter()
-    for i, text in enumerate(lines, 1):
-        name = f"{i:06d}"
-        try:
-            audio = model.apply_tts(text=text, speaker=a.voice, sample_rate=SAMPLE_RATE)
-        except Exception as e:
-            # Пропускаем фразу, но НЕ молча: тихий пропуск исказил бы соответствие текст↔звук,
-            # а именно его и должен сохранить датасет.
-            failed += 1
-            print(f"[{name}] пропуск: {e}", file=sys.stderr)
-            continue
-        total_audio += write_wav(wavs / f"{name}.wav", audio, SAMPLE_RATE)
-        meta.append(f"{name}|{text}|{text}")
-        if i % 250 == 0:
-            el = time.perf_counter() - t_start
-            print(f"  {i}/{len(lines)} · {el:.0f} с · звука {total_audio / 60:.1f} мин", file=sys.stderr)
+    # Метаданные пишем ИНКРЕМЕНТАЛЬНО (строка за строкой, с flush): краш на 2900-й фразе из 3000
+    # при записи «одним куском в конце» терял ВСЕ метаданные при готовых wav (ревизия 2026-07-31).
+    with open(out / "metadata.csv", "w", encoding="utf-8", newline="\n") as meta_f:
+        for i, text in enumerate(lines, 1):
+            name = f"utt_{i:06d}.wav"         # контракт train_piper.py: id строки = имя файла с .wav
+            try:
+                audio = model.apply_tts(text=text, speaker=a.voice, sample_rate=SAMPLE_RATE)
+            except Exception as e:
+                # Пропускаем фразу, но НЕ молча: тихий пропуск исказил бы соответствие текст↔звук,
+                # а именно его и должен сохранить датасет.
+                failed += 1
+                print(f"[{name}] пропуск: {e}", file=sys.stderr)
+                continue
+            total_audio += write_wav(wavs / name, audio, SAMPLE_RATE)
+            meta_f.write(f"{name}|{text}\n")
+            meta_f.flush()
+            done += 1
+            if i % 250 == 0:
+                el = time.perf_counter() - t_start
+                print(f"  {i}/{len(lines)} · {el:.0f} с · звука {total_audio / 60:.1f} мин", file=sys.stderr)
 
-    (out / "metadata.csv").write_text("\n".join(meta) + "\n", encoding="utf-8")
     el = time.perf_counter() - t_start
     print(
-        f"готово: {len(meta)} файлов, пропущено {failed}, звука {total_audio / 60:.1f} мин, "
+        f"готово: {done} файлов, пропущено {failed}, звука {total_audio / 60:.1f} мин, "
         f"синтез {el:.0f} с (RTF {el / max(total_audio, 1):.3f}) → {out}",
         file=sys.stderr,
     )
-    return 0
+    return 0 if done else 1
 
 
 if __name__ == "__main__":

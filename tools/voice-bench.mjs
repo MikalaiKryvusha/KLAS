@@ -102,11 +102,17 @@ function wordMatch(said, heard) {
 function startMicRecording(outWav) {
   const ff = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'dshow',
     '-i', `audio=${MIC}`, '-ac', '1', '-ar', '16000', outWav], { windowsHide: true });
+  // 'error' и подписка на 'close' ДО остановки (ревизия 2026-07-31): занятый/чужой микрофон
+  // убивает ffmpeg сразу, и прежний stop() ждал уже отстрелившее 'close' навсегда — акустический
+  // прогон висел с занятым замком динамиков; отсутствие ffmpeg роняло процесс unhandled 'error'.
+  ff.on('error', () => { /* причина попадёт в вердикт: файла не будет, hear() услышит тишину */ });
+  ff.stdin?.on('error', () => {});
+  const closed = new Promise((res) => ff.on('close', res));
   return {
     stop: async () => {
       await sleep(600);                 // хвост последней фразы не обрезать
       try { ff.stdin.write('q'); } catch { /* уже завершился */ }
-      await new Promise((res) => ff.on('close', res));
+      await closed;
     },
   };
 }
@@ -177,7 +183,9 @@ async function runCase(tts, c) {
   // и звуковой тракт Windows, которых не видит ни одна проверка по файлам.
   if (acoustic) {
     const roomHeard = hear(micWav);
-    const spokenText = r.sentences.filter((s) => s.ok).map((s) => s.text).join(' ');
+    // `spoken`, а не `text` — как в T4: тракт произносит «пятьдесят шесть», и сверка комнаты
+    // со словом «56» ложно краснела на ИСПРАВНОМ тракте (ревизия 2026-07-31)
+    const spokenText = r.sentences.filter((s) => s.ok).map((s) => s.spoken ?? s.text).join(' ');
     const m = spokenText ? wordMatch(spokenText, roomHeard) : 0;
     add('T6 акустическая петля (микрофон)', m >= WORD_MATCH_MIN,
       spokenText ? `совпадение ${m.toFixed(2)} · услышано в комнате: «${roomHeard || '(тишина)'}»`
@@ -303,11 +311,16 @@ const NORM_FIXTURE = [
   'It costs 115 dollars.',           // английский отрезок — свои числительные
 ];
 const normBad = [];
+// Вторая половина заявленного инварианта — «ни одного сокращения единиц» — раньше не проверялась
+// вовсе (только /\d/), а пропавшее поле `spoken` (дрейф контракта сайдкара) давало пустую строку
+// без цифр = ложный зелёный (ревизия 2026-07-31).
+const UNIT_LEFT = /\b(кб|мб|гб|тб|км|см|мм|кг)\b|°|%|\bкб\/с\b/i;
 for (const [i, text] of NORM_FIXTURE.entries()) {
   const r = await tts.say(text, path.join(OUT_DIR, `norm-${i}.wav`));
-  const spoken = r.ok ? (r.spoken ?? '') : '';
-  if (!r.ok) normBad.push(`«${text}» → не озвучено (${r.reason ?? r.error})`);
-  else if (/\d/.test(spoken)) normBad.push(`«${text}» → в речи осталась ЦИФРА: «${spoken}»`);
+  if (!r.ok) { normBad.push(`«${text}» → не озвучено (${r.reason ?? r.error})`); continue; }
+  if (r.spoken == null) { normBad.push(`«${text}» → сайдкар не вернул поле spoken — контракт дрейфанул, проверка слепа`); continue; }
+  if (/\d/.test(r.spoken)) normBad.push(`«${text}» → в речи осталась ЦИФРА: «${r.spoken}»`);
+  else if (UNIT_LEFT.test(r.spoken)) normBad.push(`«${text}» → в речи осталось СОКРАЩЕНИЕ: «${r.spoken}»`);
 }
 console.log(`[T0b нормализация] ${normBad.length === 0 ? '✅' : '❌'} ${NORM_FIXTURE.length - normBad.length}/${NORM_FIXTURE.length}` +
   (normBad.length ? ` — ${normBad.join(' | ')}` : ' — числа и единицы разворачиваются в слова'));

@@ -55,6 +55,11 @@ export function verifyMetadata(csvPath) {
   const lines = raw.split('\n').filter((l) => l.length > 0);
   const problems = [];
 
+  // ПУСТОЙ корпус — не «ноль проблем», а красный: сборщик со сломанным ffmpeg/NaN-аргументами
+  // отдавал 0 сегментов, охранник зеленел на пустоте, и «ГОТОВО: 0 реплик» уходило кодом 0
+  // (ревизия 2026-07-31).
+  if (lines.length === 0) problems.push({ row: 0, kind: 'empty-corpus', line: '(файл пуст)' });
+
   lines.forEach((line, i) => {
     const n = i + 1;
     if (line.includes('"')) problems.push({ row: n, kind: 'quotechar', line });
@@ -129,8 +134,15 @@ function selfTest() {
   const invariant = cases.every(([input]) => !/["|\r\n]/.test(sanitizeText(input)));
   console.log(`${invariant ? 'PASS' : 'FAIL'} · инвариант: после чистки не осталось ни " ни | ни перевода строки`);
 
-  const total = cases.length + 1;
-  const good = pass + (invariant ? 1 : 0);
+  // Пустой корпус обязан краснеть (ревизия 2026-07-31): «0 строк = 0 проблем» пропускало
+  // несобранный датасет в обучение.
+  const emptyCsv = `${process.env.TEMP || '/tmp'}/piper-guard-selftest-empty.csv`;
+  writeFileSync(emptyCsv, '\n', 'utf8');
+  const emptyRed = !verifyMetadata(emptyCsv).ok;
+  console.log(`${emptyRed ? 'PASS' : 'FAIL'} · пустой корпус не проходит охранника`);
+
+  const total = cases.length + 2;
+  const good = pass + (invariant ? 1 : 0) + (emptyRed ? 1 : 0);
   console.log(`\nИТОГО: ${good}/${total}`);
   return good === total;
 }

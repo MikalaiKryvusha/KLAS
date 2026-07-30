@@ -123,6 +123,7 @@ for tag, raw in TEXTS:
 
 with open(os.path.join(OUT, f"report_{PREFIX}.json"), "w", encoding="utf-8") as f:
     json.dump({"ref": pair, "items": report,
-               "vram_peak_gb": round(torch.cuda.max_memory_allocated() / 1024**3, 2)},
+               "vram_peak_gb": round(torch.cuda.max_memory_allocated() / 1024**3, 2)
+               if torch.cuda.is_available() else 0},
               f, ensure_ascii=False, indent=2)
 print("=== ГОТОВО ===", flush=True)

@@ -86,6 +86,9 @@ SENT_PAUSE_S = 0.35
 TRANSLIT = os.environ.get("TRANSLIT", "abbrev")
 
 argv = sys.argv[1:]
+if len(argv) < 2:
+    sys.exit("Использование: clone_cosyvoice.py <ref.wav> <ref.txt> [префикс] [speed]  "
+             "(у соседних clone_* есть дефолты, у CosyVoice их нет намеренно — эталон обязателен)")
 REF_WAV = argv[0]
 REF_TXT = open(argv[1], encoding="utf-8").read().strip()
 PREFIX = argv[2] if len(argv) > 2 else "cosy"

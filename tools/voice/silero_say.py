@@ -42,14 +42,19 @@ def ensure_model() -> Path:
             return local
     for name, url in MODEL_URLS:
         local = MODELS_DIR / f"{name}.pt"
+        tmp = MODELS_DIR / f"{name}.pt.part"
+        # Качаем во временное имя и переименовываем ПОСЛЕ успеха: except ловит только исключение,
+        # а убитый процесс/ребут оставлял битый .pt, который exists() вечно принимал за модель
+        # и каждый запуск падал на распаковке без самолечения (ревизия 2026-07-31).
         try:
             log({"stage": "download", "model": name, "url": url})
-            urllib.request.urlretrieve(url, local)
+            urllib.request.urlretrieve(url, tmp)
+            tmp.replace(local)
             return local
         except Exception as e:  # noqa: BLE001 — пробуем следующий вариант
             log({"stage": "download_failed", "model": name, "error": str(e)})
-            if local.exists():
-                local.unlink()
+            if tmp.exists():
+                tmp.unlink()
     raise SystemExit("Не удалось получить модель Silero (v5/v4)")
 
 

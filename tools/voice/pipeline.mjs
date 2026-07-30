@@ -147,27 +147,45 @@ export async function runTurn({ tts, question, user, outDir, playFn, onText }) {
   // дельте, поэтому проверка на контент выбросила бы ровно то событие, ради которого всё делается.
   let finishReason = null;
   const decoder = new TextDecoder();
-  for await (const chunk of res.body) {
-    for (const line of decoder.decode(chunk, { stream: true }).split('\n')) {
-      if (!line.startsWith('data: ')) continue;
-      const payload = line.slice(6).trim();
-      if (payload === '[DONE]') continue;
-      let evt;
-      try { evt = JSON.parse(payload); } catch { continue; }
-      const fr = evt.choices?.[0]?.finish_reason;
-      if (fr) finishReason = fr;
-      const delta = evt.choices?.[0]?.delta?.content;
-      if (!delta) continue;
-      full += delta;
-      buf += delta;
-      for (;;) {
-        const cut = firstSentenceCut(buf);
-        if (cut === -1) break;
-        enqueue(buf.slice(0, cut).trim());
-        buf = buf.slice(cut);
-      }
+  const handleLine = (line) => {
+    if (!line.startsWith('data: ')) return;
+    const payload = line.slice(6).trim();
+    if (payload === '[DONE]') return;
+    let evt;
+    try { evt = JSON.parse(payload); } catch { return; }
+    const fr = evt.choices?.[0]?.finish_reason;
+    if (fr) finishReason = fr;
+    const delta = evt.choices?.[0]?.delta?.content;
+    if (!delta) return;
+    full += delta;
+    buf += delta;
+    for (;;) {
+      const cut = firstSentenceCut(buf);
+      if (cut === -1) break;
+      enqueue(buf.slice(0, cut).trim());
+      buf = buf.slice(cut);
     }
+  };
+  // Хвост, не завершённый '\n', живёт МЕЖДУ чанками. TextDecoder(stream) чинит только разрезанные
+  // БАЙТЫ utf-8; СТРОКУ `data: {...}`, разрезанную границей чанка, прежний код терял молча: первая
+  // половина — битый JSON в catch, вторая не начинается с 'data: ' — дельта (или финальный
+  // finish_reason) выпадали из речи без следа (ревизия 2026-07-31). [NOT-TESTED]
+  let sse = '';
+  try {
+    for await (const chunk of res.body) {
+      sse += decoder.decode(chunk, { stream: true });
+      const lines = sse.split('\n');
+      sse = lines.pop();                 // недорезанная строка ждёт следующего чанка
+      for (const line of lines) handleLine(line);
+    }
+  } catch (e) {
+    // Обрыв стрима (смерть гейтвея, bugs/15) не должен оставлять плавающий playChain: уже
+    // поставленные фразы иначе доигрывают в фоне ПОВЕРХ следующего кейса бенча.
+    await playChain.catch(() => {});
+    throw e;
   }
+  sse += decoder.decode();
+  if (sse) handleLine(sse);
   if (buf.trim()) enqueue(buf.trim());   // хвост без завершающей пунктуации
   const coreMs = performance.now() - t0;
   await playChain;

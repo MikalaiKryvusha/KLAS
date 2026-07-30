@@ -36,10 +36,14 @@ let totalRef = 0, totalHit = 0;
 const rows = [];
 for (const [i, phrase] of PHRASES.entries()) {
   const wav = path.join(OUT_DIR, `roundtrip-${i}.wav`);
+  // Провал фразы ОСТАЁТСЯ в знаменателе (totalRef += слова, hit 0): раньше провалы выпадали
+  // из счёта, и при 9 сломанных фразах из 10 итог считался по одной уцелевшей — «100%, PASS»
+  // на массовом отказе синтеза (ревизия 2026-07-31).
+  const fail = (label) => { totalRef += norm(phrase).split(' ').length; rows.push({ phrase, got: label, pct: 0 }); };
   const say = spawnSync('node', [path.join(HERE, 'voice-say.mjs'), phrase, '--out', wav], { encoding: 'utf8', timeout: 300_000, windowsHide: true });
-  if (say.status !== 0) { rows.push({ phrase, got: `ОШИБКА СИНТЕЗА: ${say.stderr?.slice(-120)}`, pct: 0 }); continue; }
+  if (say.status !== 0) { fail(`ОШИБКА СИНТЕЗА: ${say.stderr?.slice(-120)}`); continue; }
   const hear = spawnSync('node', [path.join(HERE, 'voice-hear.mjs'), wav], { encoding: 'utf8', timeout: 300_000, windowsHide: true });
-  if (hear.status !== 0) { rows.push({ phrase, got: `ОШИБКА РАСПОЗНАВАНИЯ: ${hear.stderr?.slice(-120)}`, pct: 0 }); continue; }
+  if (hear.status !== 0) { fail(`ОШИБКА РАСПОЗНАВАНИЯ: ${hear.stderr?.slice(-120)}`); continue; }
   const got = hear.stdout.trim();
   // Доля слов исходника, найденных в распознанном (порядок не штрафуем — критерий по словам)
   const ref = norm(phrase).split(' ');
