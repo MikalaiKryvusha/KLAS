@@ -15,7 +15,13 @@ __pycache__/
 # Только бинари — в git не попадают НИКОГДА; какая сборка в бою, фиксирует AGENT_GUIDE.
 /llamacpp-b*/
 /LLMs/
+# Обе раскладки регистра: фактическая папка — KiwixDB (docker-compose), правило было /kiwixdb/ и
+# держалось только на core.ignorecase Windows; на case-sensitive FS (WSL!) .zim-гигабайты стали бы
+# untracked и уехали бы через git add -A (ревизия 2026-07-31)
 /kiwixdb/
+/KiwixDB/
+# Кеш скачанных deploy'ем архивов движка (~150+ МБ zip'ов) — вне git (ревизия 2026-07-31)
+/.deploy-cache/
 /homepage/*
 !/homepage/config/
 /homepage/config/*
@@ -85,6 +91,11 @@ KAIF_ADAPTATION_TASK.md
 # в git. Инцидент 2026-07-18: слабый агент положил в корень krinikspc.forest-ratio.ts.net.key.
 *.ts.net.crt
 *.ts.net.key
+# Общее правило на ключи ЛЮБОГО происхождения: маски выше ловили только tailscale-суффикс,
+# а следующий ключ пришёл бы с другим именем (ревизия 2026-07-31)
+*.key
+*.pem
+id_rsa*
 
 # Мусор ОС/редакторов
 Thumbs.db

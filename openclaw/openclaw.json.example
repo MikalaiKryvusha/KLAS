@@ -8,7 +8,7 @@
         "models": [
           {
             "id": "qwen3.6-35b-a3b",
-            "name": "Qwen3.6-35B-A3B (KLAS llama-swap, РћРЎРќРћР’РќРђРЇ СЃ 2026-07-17, РёРЅС‚. 006: С†РµРїРѕС‡РєРё OpenClaw 6/6 Р±РµР· С„Р»РµР№РєРѕРІ)",
+            "name": "Qwen3.6-35B-A3B (KLAS llama-swap, ОСНОВНАЯ с 2026-07-17, инт. 006: цепочки OpenClaw 6/6 без флейков)",
             "contextWindow": 98304,
             "maxTokens": 8192,
             "input": ["text"],
@@ -16,7 +16,7 @@
           },
           {
             "id": "qwen3.6-35b-a3b-r",
-            "name": "Qwen3.6-35B-A3B retry-alias (С‚РѕС‚ Р¶Рµ РёРЅСЃС‚Р°РЅСЃ llama-swap; fallback в„–1 = СЂРµС‚СЂР°Р№ С‚РѕР№ Р¶Рµ РјРѕРґРµР»Рё РїСЂРё 500 СЃРµСЂРІРµСЂР°)",
+            "name": "Qwen3.6-35B-A3B retry-alias (тот же инстанс llama-swap; fallback №1 = ретрай той же модели при 500 сервера)",
             "contextWindow": 98304,
             "maxTokens": 8192,
             "input": ["text"],
@@ -24,7 +24,7 @@
           },
           {
             "id": "qwen3.5-35b",
-            "name": "Qwen3.5-35B-A3B (Р±С‹РІС€Р°СЏ РѕСЃРЅРѕРІРЅР°СЏ в†’ fallback РґРѕ РѕР±РєР°С‚РєРё 3.6, РёРЅС‚. 006 Q2; С†РµРїРѕС‡РєРё 5/6)",
+            "name": "Qwen3.5-35B-A3B (бывшая основная → fallback до обкатки 3.6, инт. 006 Q2; цепочки 5/6)",
             "contextWindow": 98304,
             "maxTokens": 8192,
             "input": ["text"],
