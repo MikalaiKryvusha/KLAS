@@ -33,7 +33,13 @@ from ruaccent import RUAccent
 from f5_tts.infer.utils_infer import infer_process, load_model, load_vocoder, preprocess_ref_audio_text
 from f5_tts.model import DiT
 
-OUT = "/mnt/f/KLAS/voice/out/clone"
+OUT = os.environ.get("CLONE_OUT", "/mnt/f/KLAS/voice/out/clone")
+# ESpeech — модель на 4000 ч РУССКОГО, английских фонем в ней нет. Вердикт владельца 2026-07-30:
+# «английские слова произносит плохо», «RTX 5070 Ti произносит плохо», «тараторит на коде и
+# английских командах». Поэтому режим транслитерации у этого движка — 'full' ПО УМОЛЧАНИЮ:
+# латиницы в речи не остаётся ни одной буквы. Решение владельца о способе — канон 2026-07-29
+# («транслитерация кириллицей — второй способ самый хороший»).
+TRANSLIT = os.environ.get("TRANSLIT", "full")
 MODEL = "/opt/espeech/rl_v2/espeech_tts_rlv2.pt"
 VOCAB = "/opt/espeech/rl_v2/vocab.txt"
 MODEL_CFG = dict(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4)
@@ -86,7 +92,7 @@ print(f"=== длительность эталона после препроце�
 
 report = []
 for tag, raw in TEXTS:
-    spoken = normalize(raw)                 # единицы, дроби, код — слой из bugs/13
+    spoken = normalize(raw, translit=TRANSLIT)   # единицы, дроби, код + латиница в кириллицу
     accented = acc.process_all(spoken)      # ударения: то, чего нет ни у Qwen, ни у Silero
     t0 = time.time()
     wave, sr, _ = infer_process(ref_proc, ref_text_proc, accented, model, vocoder,

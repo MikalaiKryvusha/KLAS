@@ -19,7 +19,8 @@
 
 Тексты кастинга ЗАФИКСИРОВАНЫ (`homeworks/03`) — менять нельзя.
 """
-import os, sys, time, json
+import os, re, sys, time, json
+import numpy as np
 import soundfile as sf
 import torch
 
@@ -28,7 +29,22 @@ from text_norm import normalize
 from ref_pair import check_ref_pair
 from qwen_tts import Qwen3TTSModel
 
-OUT = "/mnt/f/KLAS/voice/out/clone"
+OUT = os.environ.get("CLONE_OUT", "/mnt/f/KLAS/voice/out/clone")
+
+# ── Настройки, появившиеся из отслушивания владельцем 2026-07-30 ──────────────────────────
+#
+# ВЫРАЗИТЕЛЬНОСТЬ. Вердикт по эталону 60 с: «слишком чопорный голос, паузы делает неестественные,
+# балуется голосом… хочется чуть-чуть меньше выразительности». У Qwen нет ручки `speed`, зато
+# просодия рождается СЭМПЛИРОВАНИЕМ: штатные значения `temperature=0.9`, `subtalker_temperature=0.9`
+# (см. qwen3_tts_model.py:321-328). Ниже температура — ровнее интонация. Это ручка модели, а не
+# пост-обработка: пост-обработку тона владелец уже забраковал («слышно искажение голоса машинерией»).
+TEMPERATURE = float(os.environ.get("QWEN_TEMP", "0.9"))
+#
+# ПАУЗЫ МЕЖДУ ПРЕДЛОЖЕНИЯМИ. Вердикт: «не делает паузы между предложениями», «глотает окончания
+# иногда». Причина в том, что мы отдавали движку ВСЮ реплику одним куском. Синтезируем по
+# предложениям и склеиваем через тишину — заодно короткий кусок реже теряет окончание.
+SENT_PAUSE_S = 0.35
+
 BASE = "/opt/qwentts/base"          # 1.7B для клона голоса (model.safetensors 3.86 ГБ)
 REFS_DIR = "/mnt/f/KLAS/voice/refs_vihrov"
 
@@ -73,14 +89,41 @@ os.makedirs(OUT, exist_ok=True)
 print("=== загружаю Qwen3-TTS 1.7B ===", flush=True)
 m = Qwen3TTSModel.from_pretrained(BASE, device_map="cuda:0", dtype=torch.bfloat16)
 
+def split_sentences(text: str):
+    """
+    Разбиение на предложения. `razdel` уже стоит в venv (русский сплиттер, знает сокращения);
+    регулярка оставлена запасным путём, чтобы скрипт не падал, если пакета не окажется.
+    """
+    try:
+        from razdel import sentenize
+        parts = [s.text.strip() for s in sentenize(text)]
+    except Exception:
+        parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", text)]
+    return [p for p in parts if p]
+
+
 report = []
 for name, wav, text, pair in checked:
-    print(f"\n########## ЭТАЛОН {name} ({pair}) ##########", flush=True)
+    print(f"\n########## ЭТАЛОН {name} ({pair}) · temp={TEMPERATURE} ##########", flush=True)
     for tag, raw in TEXTS:
-        spoken = normalize(raw)
+        # 'abbrev': аббревиатуры и имена файлов правим, обычный английский оставляем — его
+        # владелец назвал у Qwen «сильно лучше», транслитерация только добавила бы акцент.
+        spoken = normalize(raw, translit="abbrev")
+        sents = split_sentences(spoken)
         t0 = time.time()
-        wavs, sr = m.generate_voice_clone(text=spoken, language="russian", ref_audio=wav, ref_text=text)
+        chunks, sr = [], None
+        for s in sents:
+            w, sr = m.generate_voice_clone(text=s, language="russian", ref_audio=wav,
+                                           ref_text=text, temperature=TEMPERATURE,
+                                           subtalker_temperature=TEMPERATURE)
+            chunks.append(w[0])
+        gap = np.zeros(int(sr * SENT_PAUSE_S), dtype=chunks[0].dtype)
+        joined = chunks[0]
+        for c in chunks[1:]:
+            joined = np.concatenate([joined, gap, c])
+        wavs = [joined]
         el = time.time() - t0
+        print(f"  ({len(sents)} предложений)", flush=True)
         p = os.path.join(OUT, f"qwen{name}_{tag}.wav" if name.endswith("s") and name[0].isdigit()
                               else f"{name}_{tag}.wav")
         sf.write(p, wavs[0], sr)
