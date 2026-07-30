@@ -51,9 +51,12 @@ MODEL = os.environ.get("F5_MODEL", "/opt/espeech/rl_v2/espeech_tts_rlv2.pt")
 VOCAB = os.environ.get("F5_VOCAB", "/opt/espeech/rl_v2/vocab.txt")
 MODEL_CFG = dict(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4)
 
+# Эталоны с 2026-07-30 живут в ОДНОЙ папке `voice/sources/` (указание владельца «исходники
+# голосов собери в одну папку»), а не рядом с выводом клонов.
+SOURCES = "/mnt/f/KLAS/voice/sources"
 argv = sys.argv[1:]
-REF_WAV = argv[0] if len(argv) > 0 else os.path.join(OUT, "ref_vihrov_12s.wav")
-REF_TXT_PATH = argv[1] if len(argv) > 1 else os.path.join(OUT, "ref_vihrov_12s.txt")
+REF_WAV = argv[0] if len(argv) > 0 else os.path.join(SOURCES, "jarvis_vihrov", "ref_vihrov_12s.wav")
+REF_TXT_PATH = argv[1] if len(argv) > 1 else os.path.join(SOURCES, "jarvis_vihrov", "ref_vihrov_12s.txt")
 PREFIX = argv[2] if len(argv) > 2 else "espeech"
 
 # ТЕМП. F5 не имеет собственного представления о скорости речи — он берёт её из ЭТАЛОНА

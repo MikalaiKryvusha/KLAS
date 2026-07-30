@@ -46,7 +46,9 @@ TEMPERATURE = float(os.environ.get("QWEN_TEMP", "0.9"))
 SENT_PAUSE_S = 0.35
 
 BASE = "/opt/qwentts/base"          # 1.7B для клона голоса (model.safetensors 3.86 ГБ)
-REFS_DIR = "/mnt/f/KLAS/voice/refs_vihrov"
+# Эталоны с 2026-07-30 живут в ОДНОЙ папке `voice/sources/` (указание владельца
+# «исходники голосов собери в одну папку»), а не в отдельных refs_*.
+REFS_DIR = "/mnt/f/KLAS/voice/sources/jarvis_vihrov"
 
 # Без аргументов — два условия эталона для Jarvis (Вихров). С аргументами
 # `<эталон> <текст> <имя>` — одно условие для ДРУГОГО голоса (Joi) тем же кодом:
@@ -56,7 +58,7 @@ if len(argv) >= 3:
     CONDITIONS = [(argv[2], argv[0], argv[1])]
 else:
     CONDITIONS = [
-        ("12s", os.path.join(OUT, "ref_vihrov_12s.wav"), os.path.join(OUT, "ref_vihrov_12s.txt")),
+        ("12s", os.path.join(REFS_DIR, "ref_vihrov_12s.wav"), os.path.join(REFS_DIR, "ref_vihrov_12s.txt")),
         ("60s", os.path.join(REFS_DIR, "ref_3_52m14s.mp3"), os.path.join(REFS_DIR, "ref_3_52m14s.txt")),
     ]
 
