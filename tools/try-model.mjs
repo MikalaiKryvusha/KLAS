@@ -46,7 +46,7 @@ const alias = basename(file, '.gguf').toLowerCase().replace(/[^a-z0-9.]+/g, '-')
 console.log(`\n— дальше: добавь в llama-swap/config.yaml (models:) и перезапусти llama-swap —\n`);
 console.log(`  "${alias}":
     cmd: >
-      F:\\KLAS\\llamacpp\\llama-server.exe
+      ${join(ROOT, 'llamacpp', 'llama-server.exe')}
       -m ${dest}
       --port \${PORT} -c 32768 -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
       -np 1 --slots --cont-batching

@@ -4,10 +4,11 @@
 # Запуск:  powershell -File F:\KLAS\tools\health-check.ps1 [-Port 8080]
 
 param(
-    [int]$Port = 8080  # порт llama-server; kiwix (docker) маппит тот же 8080 — см. карту проекта
+    [int]$Port = 8080  # порт llama-server/llama-swap; kiwix с бага 01 живёт на 8081 (docker-compose)
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
+$issues = 0  # счётчик проблем: код выхода обязан отражать здоровье, иначе deploy/install слепы (ревизия 2026-07-31)
 Write-Host "=== KLAS health-check (порт $Port) — $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" -ForegroundColor Cyan
 
 # 1) Кто слушает порт (llama-server? kiwix-docker? никто?)
@@ -38,11 +39,14 @@ if ($health) {
     }
     $models = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/v1/models" -TimeoutSec 5
     if ($models) { $models.data | ForEach-Object { Write-Host "  model: $($_.id)" } }
-} else { Write-Host "  сервер на порту $Port не отвечает (это может быть kiwix — см. выше)" }
+} else { Write-Host "  сервер на порту $Port не отвечает (порт занят чужим процессом или стек лежит; kiwix тут не бывает — он на 8081 с бага 01)"; $issues++ }
 
 # 4) GPU / VRAM
 Write-Host "`n-- GPU (nvidia-smi) --" -ForegroundColor Yellow
 $smi = nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader
 if ($smi) { $smi | ForEach-Object { Write-Host "  $_" } } else { Write-Host "  nvidia-smi недоступен" }
 
-Write-Host "`n=== конец health-check ===" -ForegroundColor Cyan
+Write-Host "`n=== конец health-check ($(if ($issues -eq 0) { 'здоров' } else { "проблем: $issues" })) ===" -ForegroundColor Cyan
+# Раньше скрипт ВСЕГДА выходил кодом 0 ($ErrorActionPreference глушит и ошибки, и коды) —
+# «финальная проверка» деплоя была фикцией: catch-ветка у вызывающих недостижима.
+exit $(if ($issues -eq 0) { 0 } else { 1 })

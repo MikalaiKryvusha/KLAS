@@ -4,13 +4,14 @@
     "llamacpp": {
       "kind": "github-release",
       "repo": "ggml-org/llama.cpp",
-      "tag": "b9538",
+      "tag": "b10167",
       "assets": [
-        "llama-b9538-bin-win-cuda-13.3-x64.zip",
+        "llama-b10167-bin-win-cuda-13.3-x64.zip",
         "cudart-llama-bin-win-cuda-13.3-x64.zip"
       ],
       "dest": "llamacpp",
-      "check": { "file": "llamacpp/llama-server.exe" }
+      "check": { "file": "llamacpp/llama-server.exe" },
+      "$comment": "b10167 = боевой билд (принят 2026-07-28, AGENT_GUIDE «Сборка»). Ревизия 2026-07-31: манифест отставал на b9538, который НЕ умеет тул-коллы Qwen3.6 (bugs/05) — свежий клон получал нерабочее ядро. Меняешь боевой билд — меняй и этот пин"
     },
     "model-qwen3.6-35b-a3b": {
       "kind": "url",

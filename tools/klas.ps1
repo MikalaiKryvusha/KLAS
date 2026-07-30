@@ -26,8 +26,15 @@ $GatewayLogDir = 'F:\KLAS\logs'                     # вывод гейтвея 
 
 # Поднять весь стек KLAS. Идемпотентно (docker up -d и funnel --bg безопасно вызывать повторно).
 function Start-KlasStack {
-    # 1) docker-сервисы (kiwix / open-webui / homepage / caddy)
-    try { & docker compose -f $Compose up -d 2>&1 | Out-Null } catch {}
+    # 1) docker-сервисы (kiwix / open-webui / homepage / caddy).
+    # Результат ЗАПОМИНАЕТСЯ ($script:DockerUp): раньше провал compose глотался catch'ем, и трей
+    # рапортовал «запущен и работает» при лежащем Docker Desktop (ревизия 2026-07-31).
+    $script:DockerUp = $false
+    try {
+        & docker compose -f $Compose up -d 2>&1 | Out-Null
+        $script:DockerUp = ($LASTEXITCODE -eq 0)
+    } catch {}
+    if (-not $script:DockerUp) { Write-Warning 'docker compose не поднялся (Docker Desktop запущен?) — пульт/чат/вики недоступны' }
     # 2) llama-swap (LLM «спит, пока не позовут») — только если ещё не запущен; тихо, без окна
     if (-not (Get-Process llama-swap -ErrorAction SilentlyContinue)) {
         Start-Process wscript.exe -ArgumentList '//B','//Nologo',"`"$LlamaVbs`""
@@ -107,7 +114,9 @@ switch ($Action) {
         # Поднять весь стек и уведомить владельца пушем.
         # ToolTipIcon.None — БЕЗ синего info-круга; в уведомлении остаётся иконка-кот (иконка трея).
         Start-KlasStack
-        $notify.ShowBalloonTip(5000, 'KLAS', 'KLAS запущен и работает', [System.Windows.Forms.ToolTipIcon]::None)
+        $balloon = if ($script:DockerUp) { 'KLAS запущен и работает' }
+                   else { 'KLAS поднят ЧАСТИЧНО: docker-стек не стартовал — запусти Docker Desktop' }
+        $notify.ShowBalloonTip(5000, 'KLAS', $balloon, [System.Windows.Forms.ToolTipIcon]::None)
 
         # Цикл сообщений трея (живёт, пока не выбрано «Stop KLAS and exit»)
         [System.Windows.Forms.Application]::Run()

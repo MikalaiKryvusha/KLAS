@@ -16,7 +16,7 @@
 //   npm            — глобальный npm-пакет (npm install -g <package>)
 //   commands       — последовательность команд из корня KLAS (venv и т.п.); идемпотентность — через check
 
-import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, renameSync, rmSync, createReadStream } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, renameSync, rmSync, createReadStream, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -66,9 +66,16 @@ async function download(url, destAbs, expectedSha) {       // скачивани
   act(`download ${url}${have ? ` (докачка с ${(have / 1e6).toFixed(0)} MB)` : ''}`);
   if (!APPLY) return;
   const res = await fetch(url, { headers, redirect: 'follow' });
-  if (!res.ok && res.status !== 206) throw new Error(`HTTP ${res.status} для ${url}`);
-  const append = res.status === 206;                       // сервер поддержал докачку
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(part, { flags: append ? 'a' : 'w' }));
+  // 416 = Range за концом файла: .part уже ПОЛНЫЙ (процесс убит между концом загрузки и rename —
+  // у 7-ГБ моделей окно подсчёта sha ~30 с). Раньше это был вечный клин: каждый повтор слал тот же
+  // Range и падал тем же 416, .part никто не чистил (ревизия 2026-07-31).
+  if (res.status === 416 && have > 0) {
+    act(`.part уже полон (${(have / 1e6).toFixed(0)} MB) — проверяю и финализирую`);
+  } else {
+    if (!res.ok && res.status !== 206) throw new Error(`HTTP ${res.status} для ${url}`);
+    const append = res.status === 206;                       // сервер поддержал докачку
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(part, { flags: append ? 'a' : 'w' }));
+  }
   if (expectedSha) {
     const got = await sha256File(part);
     if (got !== expectedSha.toUpperCase()) { rmSync(part); throw new Error(`sha256 не совпал: ${got}`); }
@@ -177,7 +184,8 @@ if (!APPLY) console.log('\nЕсли план устраивает: node tools/de
 else {
   // Пост-настройка (план 02, хвост): финальная проверка стека одной командой + напоминания владельцу.
   console.log('\n— финальный health-check —');
-  try { execFileSync('powershell', ['-NoProfile', '-File', join(ROOT, 'tools', 'health-check.ps1')], { stdio: 'inherit' }); }
+  // -ExecutionPolicy Bypass: на чистой Windows политика Restricted молча не даёт запустить .ps1
+  try { execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT, 'tools', 'health-check.ps1')], { stdio: 'inherit' }); }
   catch { console.log('⚠ health-check сообщил о проблемах (нормально, если llama-swap ещё не запущен)'); }
   console.log('\nДальше руками владельца (persistence агент не создаёт):');
   console.log('  автозапуск стека: powershell -File tools\\install-autostart.ps1');

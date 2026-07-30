@@ -11,7 +11,7 @@
 //   node tools/deploy-knowledge.mjs --get wikipedia_ru      # скачать конкретную базу
 //   node tools/deploy-knowledge.mjs --mcp                    # подготовить MCP-адаптер (образ + конфиг)
 
-import { createWriteStream, existsSync, statSync, renameSync, mkdirSync } from 'node:fs';
+import { createWriteStream, existsSync, statSync, renameSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -34,7 +34,8 @@ if (arg('--list') || process.argv.length <= 2) {
   console.log('Рекомендованные .zim (скачать: node tools/deploy-knowledge.mjs --get <ключ>):\n');
   for (const [k, u] of Object.entries(RECOMMENDED)) console.log(`  ${k.padEnd(14)} ${u}`);
   console.log('\nПолный каталог: https://download.kiwix.org/zim/  ·  уже в kiwixdb/:');
-  try { for (const f of execFileSync('ls', [ZIMDIR], { encoding: 'utf8' }).split('\n').filter((x) => x.endsWith('.zim'))) console.log('  ✓ ' + f); } catch {}
+  // readdirSync, не `ls`: на стоковой Windows `ls` нет, и секция молча не печаталась НИКОГДА (ревизия 2026-07-31)
+  try { for (const f of readdirSync(ZIMDIR).filter((x) => x.endsWith('.zim'))) console.log('  ✓ ' + f); } catch { /* каталога ещё нет */ }
   console.log('\nMCP-адаптер поиска для агента: node tools/deploy-knowledge.mjs --mcp');
 }
 

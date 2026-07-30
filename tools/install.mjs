@@ -122,7 +122,11 @@ function itemsFor(answers, env) {
     ? ['model-qwythos-9b', 'model-gemma-4-12b']
     : answers.model === 'backup' ? ['model-gemma-4-12b'] : ['model-qwythos-9b'];
   const items = ['llamacpp', ...models, 'llama-swap'];
-  if (env.docker) items.push('docker-stack');
+  // По РАБОТАЮЩЕМУ docker, а не по наличию CLI: detect честно вычислял dockerRunning, но его
+  // никто не читал — «docker установлен, но не запущен» (типично после ребута) валил compose
+  // молча (ревизия 2026-07-31).
+  if (env.dockerRunning) items.push('docker-stack');
+  else if (env.docker) console.log('⚠ Docker установлен, но не запущен — веб-стек (пульт/чат/вики) пропущен. Запусти Docker Desktop и повтори установку.');
   return items;
 }
 
@@ -199,6 +203,15 @@ async function main() {
   // ── Установка компонентов через движок deploy.mjs (Ф3) ──
   line(`\n${t('installing')}`);
   const deployOk = runInherit('node', [join(ROOT, 'tools', 'deploy.mjs'), '--apply', '--items', items.join(',')]);
+  // Фазы отмечаются сделанными ТОЛЬКО при успехе деплоя, и провал останавливает мастера ДО
+  // ярлыков и экрана успеха: раньше «модель не скачалась» заканчивалось экраном «установлен и
+  // работает!» со ссылками на мёртвый чат (ревизия 2026-07-31). Состояние не чистим — повторный
+  // запуск продолжит с места обрыва.
+  if (!deployOk) {
+    line('\n⛔ Установка НЕ завершена: часть компонентов не встала (см. вывод deploy выше).');
+    line('   Почини причину (сеть/диск/docker) и запусти мастера ещё раз — он продолжит, а не начнёт заново.');
+    return;
+  }
   ['engine', 'model', 'docker', 'llama-swap'].forEach((p) => markDone(ROOT, state, p));
 
   // Базы знаний (.zim) из каталога Kiwix → kiwixdb/ (kiwix подхватит при подъёме стека).
@@ -241,7 +254,6 @@ async function main() {
   line(`  ${t('links_chat')}:  http://localhost:3080/`);
   line(`  ${t('links_wiki')}:  http://localhost/wiki/`);
   line(`  ${t('where_password')}`);
-  if (!deployOk) line(`\n⚠ Часть компонентов не установилась — см. вывод выше; повторный запуск дотянет недостающее.`);
   if (!YES && (await confirm(t('open_now'), true))) {
     spawnSync('cmd', ['/c', 'start', '', 'http://localhost/'], { cwd: ROOT });
   }

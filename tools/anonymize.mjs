@@ -39,7 +39,9 @@ const REPLACEMENTS = [
   [/Mikalai Kryvusha aka KOT KRINIK · Николай Кривуша aka Кот Криник/g, 'независимый разработчик'],
   [/Mikalai Kryvusha aka KOT KRINIK/g, 'независимый разработчик'],
   [/Николай Кривуша aka Кот Криник/g, 'независимый разработчик'],
-  [/https?:\/\/github\.com\/MikalaiKryvusha\/KLAS(\.git)?/g, 'КLAS (локальная копия, origin удалён)'],
+  // Первая буква была КИРИЛЛИЧЕСКОЙ «К» (d0 9a) — анонимизированные документы получали смешанное
+  // «КLAS», ломающее grep по бренду; валидатор PROBES этого не ловил (ревизия 2026-07-31)
+  [/https?:\/\/github\.com\/MikalaiKryvusha\/KLAS(\.git)?/g, 'KLAS (локальная копия, origin удалён)'],
   [/https?:\/\/github\.com\/MikalaiKryvusha\/KAIF/g, 'KAIF (upstream)'],
   [/github\.com\/MikalaiKryvusha/g, '(origin удалён)'],
   [/MikalaiKryvusha/g, 'anon'],
