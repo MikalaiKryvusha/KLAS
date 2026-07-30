@@ -112,8 +112,9 @@ the repository — they are pulled at install time.
 | Jarvis | humanlike voice assistant, screen vision, Windows control | 🔧 |
 
 Jarvis is underway, not done: the assistant core is chosen and running on the local models, and the
-The voice pipeline speaks, hears and holds a dialogue offline — in Russian and English within a single
-reply. Still ahead — the Android node, voice authentication, and Windows control.
+voice pipeline speaks, hears and holds a dialogue offline. English words are transliterated into
+Cyrillic so that a single voice carries the whole reply. Next up — launching by name («Джарвис»,
+«Джой»), the persona voice clones, the Android node, voice authentication, and Windows control.
 
 ### Managed by KAIF
 
@@ -218,7 +219,8 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # копия без ав
 | Jarvis | человекоподобный голосовой ассистент, зрение экрана, управление Windows | 🔧 |
 
 Jarvis в работе, а не готов: ядро ассистента выбрано и запущено на локальных моделях, голосовой тракт
-говорит, слышит и держит диалог офлайн — по-русски и по-английски внутри одной реплики. Впереди —
+говорит, слышит и держит диалог офлайн. Английские слова произносятся транслитерацией кириллицей —
+чтобы всю реплику вёл ОДИН голос. Впереди — запуск по имени («Джарвис», «Джой»), голоса персон,
 Android-нода, голосовая аутентификация и управление Windows.
 
 ### Управляется через KAIF
