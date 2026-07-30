@@ -67,6 +67,11 @@ TEXTS = [
     ("5-смесь",   "Эта технология называется machine learning, и она уже работает: Python-скрипт обучает модель, а результат сохраняется в файл model.onnx."),
 ]
 
+# Пересчёт только части текстов — см. пояснение в `clone_qwen.py`. Фильтруется НАБОР, не содержимое.
+_only = [t.strip() for t in os.environ.get("ONLY_TAGS", "").split(",") if t.strip()]
+if _only:
+    TEXTS = [t for t in TEXTS if t[0] in _only]
+
 # ГЕЙТ: пара проверяется ДО того, как потрачены минуты на загрузку модели и RUAccent.
 pair = check_ref_pair(REF_WAV, REF_TXT, engine="f5")
 print(f"=== эталон принят: {pair} · speed={SPEED} · ожидаемый темп "
