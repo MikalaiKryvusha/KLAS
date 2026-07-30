@@ -76,6 +76,15 @@ MODEL_DIR = os.environ.get("COSY_DIR", "/opt/cosyvoice3")   # …-rl для RL-�
 OUT = os.environ.get("CLONE_OUT", "/mnt/f/KLAS/voice/out/clone/v3/_parts")
 SENT_PAUSE_S = 0.35
 
+# ⚠️ РЕЖИМ ТРАНСЛИТЕРАЦИИ — ручкой наружу, а не константой (2026-07-31).
+# Умолчание 'abbrev' сохранено: так решено каноном для мультиязычных движков. Но правило
+# `abbrev` писалось под то, что «RTX по-русски читается Эр-Ти-Икс в любом случае», и на
+# мультиязычной модели оно даёт ГИБРИДЫ — «Open веб-ю-ай», «эн-пи-эм run build», — то есть
+# возвращает ровно тот костыль, ради снятия которого этот кандидат и взят.
+# Что звучит лучше, решает УХО ВЛАДЕЛЬЦА (EXP-0031: агент не судит красоту), поэтому нужна
+# возможность выдать оба варианта одним прогоном модели, а не спорить о них в документе.
+TRANSLIT = os.environ.get("TRANSLIT", "abbrev")
+
 argv = sys.argv[1:]
 REF_WAV = argv[0]
 REF_TXT = open(argv[1], encoding="utf-8").read().strip()
@@ -96,7 +105,7 @@ if _only:
 # ГЕЙТ пары до загрузки модели (`bugs/16`). engine="cosy" — порога обрезки у него нет,
 # проверяется только сходимость темпа «символов в секунду».
 pair = check_ref_pair(REF_WAV, REF_TXT, engine="cosy")
-print(f"=== эталон принят: {pair} · speed={SPEED} · модель {MODEL_DIR} ===", flush=True)
+print(f"=== эталон принят: {pair} · speed={SPEED} · модель {MODEL_DIR} · транслит={TRANSLIT} ===", flush=True)
 
 os.makedirs(OUT, exist_ok=True)
 
@@ -128,7 +137,7 @@ REF_TXT_MODEL = REF_TXT if "<|endofprompt|>" in REF_TXT else PROMPT_PREFIX + REF
 
 report = []
 for tag, raw in TEXTS:
-    spoken = normalize(raw, translit="abbrev")
+    spoken = normalize(raw, translit=TRANSLIT)
     # ⛔ БЕЗ разбиения на предложения — в отличие от Qwen. Причина в их собственном охраннике
     # (`cosyvoice.py:94`): если кусок короче половины текста эталона, движок предупреждает
     # «this may lead to bad performance». Наши эталоны ~160 символов, а «Добрый вечер, Николай.»
