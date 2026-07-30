@@ -22,6 +22,31 @@ OUT=/opt/piper_train/vihrov
 mkdir -p "$OUT"
 LOG="$OUT/train.log"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ОХРАННИК МЕСТА НА ХОСТ-ДИСКЕ. Вечер 2026-07-30: обучение выело диск C: досуха,
+# ext4 внутри ext4.vhdx поймал ошибки записи и ушёл в аварийный режим — дистрибутив
+# перестал запускаться вовсе (`getpwnam(root) failed 5`, `Wsl/Service/CreateInstance/E_FAIL`).
+#
+# ⚠️ ПОЧЕМУ LINUX НЕ ПРЕДУПРЕДИЛ: виртуальный диск объявлен на 1 ТБ, поэтому `df /` внутри WSL
+# показывал 874 ГБ свободных, когда на C: оставалось 7 ГБ. Изнутри дистрибутива настоящее
+# ограничение НЕ ВИДНО — видно только через /mnt/c, то есть через сам хост-диск.
+#
+# Сколько ест обучение: Piper держит ДВА монитора качества (val_mel и val_mos), у каждого
+# save_top_k=5, плюс last ⇒ до 11 чекпойнтов по 846 МБ = ~9.3 ГБ ЗА ПРОГОН. Прогоны копятся.
+MIN_FREE_GB=25
+free_gb=$(df -BG --output=avail /mnt/c 2>/dev/null | tail -1 | tr -dc '0-9')
+used_gb=$(du -sBG /opt/piper_train 2>/dev/null | cut -f1 | tr -dc '0-9')
+echo "=== место на хост-диске C: свободно ${free_gb} ГБ · прошлые прогоны занимают ${used_gb:-0} ГБ"
+if [ -n "$free_gb" ] && [ "$free_gb" -lt "$MIN_FREE_GB" ]; then
+  echo "⛔ СТОП: на C: свободно ${free_gb} ГБ, нужно минимум ${MIN_FREE_GB}."
+  echo "   Один прогон съедает до 9.3 ГБ чекпойнтами, и переполнение C: ЛОМАЕТ ВЕСЬ ДИСТРИБУТИВ,"
+  echo "   а не просто останавливает обучение."
+  echo "   Освободить: find /opt/piper_train/vihrov/lightning_logs -name '*.ckpt' -delete"
+  echo "   Вернуть место Windows: wsl --shutdown, затем wsl --manage Ubuntu --set-sparse true"
+  exit 2
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
 cd /opt/piper1-gpl
 echo "=== старт обучения: steps=$STEPS batch=$BATCH workers=$WORKERS ===" | tee -a "$LOG"
 date -Is | tee -a "$LOG"
