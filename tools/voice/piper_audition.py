@@ -53,6 +53,13 @@ p.add_argument("--name", default="vihrov")
 p.add_argument("--train-dir", default=None)
 p.add_argument("--ckpt", default=None, help="по умолчанию last.ckpt самой свежей версии обучения")
 p.add_argument("--out", default=None)
+# ⚠️ Штатная ручка темпа Piper. Она НЕ растягивает готовый звук (это слышно как манипуляция, и
+# именно такую ручку владелец забраковал у клона F5) — она масштабирует предсказанные
+# ДЛИТЕЛЬНОСТИ ФОНЕМ до синтеза, и декодер заново порождает речь в новом ритме.
+# Замер 2026-07-30: при 1.0 голос идёт 16.9 симв/с, при 1.35 — 14.2 симв/с, то есть ровно темп
+# ИСХОДНОЙ записи Вихрова (14.1 симв/с). Коридор владельца — 12–14 симв/с.
+p.add_argument("--length-scale", type=float, default=1.0, help="1.0 = как обучилось; больше = медленнее")
+p.add_argument("--suffix", default="", help="приписка к имени файла, чтобы варианты не затирали друг друга")
 args = p.parse_args()
 
 train_dir = pathlib.Path(args.train_dir or f"/opt/piper_train/{args.name}")
@@ -75,30 +82,55 @@ cfg_src = train_dir / "config.json"
 cfg_dst = out_dir / f"{args.name}.onnx.json"
 
 # --- 1. экспорт -----------------------------------------------------------------------------
+# ⚠️ ГРАНАТА: `piper.train.export_onnx` зовёт `torch.onnx.export(...)` БЕЗ параметра `dynamo`
+# (`export_onnx.py:92`). Когда этот код писали, умолчанием был экспортёр на TorchScript; в нашем
+# torch 2.13 умолчание уже `dynamo=True`, и новый экспортёр через `torch.export` спотыкается о
+# data-dependent ветвление в сплайнах VITS:
+#     TorchExportError: ... File "vits/transforms.py", line 174, in rational_quadratic_spline
+# Лечение — не форкать апстрим и не переписывать их экспорт, а вернуть тот экспортёр, под
+# который их код написан: одна строка `dynamo=False`, вставленная поверх вызова.
 print("=== экспорт в ONNX...", flush=True)
-r = subprocess.run([sys.executable, "-m", "piper.train.export_onnx",
-                    "--checkpoint", str(ckpt), "--output-file", str(onnx)])
-if r.returncode != 0:
-    sys.exit(f"⛔ экспорт не удался (код {r.returncode})")
+import torch  # noqa: E402
+
+_torch_onnx_export = torch.onnx.export
+
+
+def _export_legacy(*a, **kw):
+    kw.setdefault("dynamo", False)
+    return _torch_onnx_export(*a, **kw)
+
+
+torch.onnx.export = _export_legacy
+sys.argv = ["export_onnx", "--checkpoint", str(ckpt), "--output-file", str(onnx)]
+try:
+    from piper.train.export_onnx import main as export_main  # noqa: E402
+    export_main()
+except Exception as e:  # noqa: BLE001 — падение экспорта должно быть громким и названным
+    sys.exit(f"⛔ экспорт не удался: {type(e).__name__}: {e}")
+if not onnx.exists():
+    sys.exit("⛔ экспорт отчитался успехом, но файла .onnx нет")
 if not cfg_src.exists():
     sys.exit(f"⛔ нет конфига голоса {cfg_src} — без него .onnx не загрузится")
 cfg_dst.write_bytes(cfg_src.read_bytes())
 print(f"=== {onnx.name} {onnx.stat().st_size/1e6:.1f} МБ · конфиг рядом", flush=True)
 
 # --- 2–3. синтез и склейка ------------------------------------------------------------------
-from piper import PiperVoice  # noqa: E402  (импорт после экспорта: он тяжёлый)
+from piper import PiperVoice, SynthesisConfig  # noqa: E402  (импорт после экспорта: он тяжёлый)
 
 voice = PiperVoice.load(str(onnx), config_path=str(cfg_dst))
+syn = SynthesisConfig(length_scale=args.length_scale)
 parts_dir = out_dir / "parts"
 parts_dir.mkdir(exist_ok=True)
 
+total_chars = 0.0
 part_files = []
 for tag, raw in TEXTS:
     # translit='full': Piper фонемизирует голосом espeak-ng `ru`, английских фонем в нём НЕТ
     spoken = normalize(raw, translit="full")
+    total_chars += len(spoken)
     wav_path = parts_dir / f"{tag}.wav"
     with wave.open(str(wav_path), "wb") as wf:
-        voice.synthesize_wav(spoken, wf)
+        voice.synthesize_wav(spoken, wf, syn_config=syn)
     with wave.open(str(wav_path)) as wf:
         secs = wf.getnframes() / wf.getframerate()
     print(f"  {tag:10s} {secs:5.2f} с · {spoken[:70]}", flush=True)
@@ -116,7 +148,7 @@ with open(listing, "w", encoding="utf-8") as f:
             f.write(f"file '{silence.name}'\n")
         f.write(f"file '{wp.name}'\n")
 
-glued = out_dir / f"piper_{args.name}.wav"
+glued = out_dir / f"piper_{args.name}{args.suffix}.wav"
 subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "concat",
                 "-safe", "0", "-i", str(listing), "-y", str(glued)], check=True)
 
@@ -127,7 +159,11 @@ parts_dir.rmdir()
 
 with wave.open(str(glued)) as wf:
     total = wf.getnframes() / wf.getframerate()
-print(f"\nГОТОВО: {glued}  ({total:.1f} с)")
+# Темп — счётная улика, по которой без исключений выстроились ВСЕ прежние вердикты владельца
+# (коридор 12–14 симв/с; 17 у него уже «тараторит»). Печатаем его, чтобы вариант можно было
+# судить числом ДО того, как тратится ухо человека.
+print(f"\nГОТОВО: {glued}  ({total:.1f} с · темп {total_chars / total:.1f} симв/с "
+      f"при length_scale={args.length_scale})")
 print("Дальше — выровнять громкость и положить к кандидатам:")
 print(f"  node tools/voice/normalize-loudness.mjs {glued.as_posix().replace('/mnt/f', 'F:')} "
       f"--out F:\\KLAS\\voice\\out\\candidates\\JARVIS --lufs -14")

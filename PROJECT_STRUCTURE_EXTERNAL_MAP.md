@@ -47,7 +47,13 @@
 │       ├── silero_daemon.py             #   резидентный двуязычный синтез + нормализация чисел/единиц
 │       ├── silero_say.py                #   разовый синтез (им пользуется TTS-провайдер ядра)
 │       ├── pitch-check.py               #   охранник единства голоса (F0 русского и английского)
-│       └── single-instance.mjs          #   замок: динамики — один потребитель
+│       ├── single-instance.mjs          #   замок: динамики — один потребитель
+│       ├── build-piper-dataset.mjs      #   сборка обучающего корпуса из длинной записи (нарезка + уши)
+│       ├── piper-dataset-guard.mjs      #   охранник корпуса: снимает символы, специальные для csv.reader (bugs/18)
+│       ├── train_piper.py               #   дообучение Piper VITS от чекпойнта-донора (warmstart, НЕ ckpt_path)
+│       ├── train_vihrov.sh              #   запуск обучения одной командой (только из PowerShell — см. 9.5)
+│       └── piper_audition.py            #   обученный голос → .onnx → пять текстов кастинга на выслушку
+├── .gitattributes                       # окончания строк, где они условие работоспособности: *.sh=LF, *.bat=CRLF
 ├── openclaw/      # конфиг агентного ядра ассистента (шаблон openclaw.json.example + README;
 │                  #   рабочая копия — ~/.openclaw/openclaw.json, вне git; план — plans/10)
 ├── plans/         # детальные планы шагов (реализация фаз MASTER_PLAN)     + README.md
@@ -80,6 +86,9 @@
 | `voice\models\gigaam-v3-ctc\` | УШИ по умолчанию (`--model ru`): NeMo-CTC, **34 токена** — только строчная кириллица | SOTA по чистому русскому, но БЕЗ пунктуации и БЕЗ латиницы (`bugs/10`) |
 | `voice\models\gigaam-v3-ctc-punct\` | УШИ-опция (`--model punct`): тот же GigaAM-v3, **257 токенов** — латиница, пунктуация, заглавные, «ё» | развёрнута 2026-07-29, **дефолтом НЕ стала** — ждёт вердикта владельца (`bugs/10`) |
 | `voice\out\` · `voice\bench\` | wav диалога и бенча (вне git) | ⚠️ **это криминалистика:** файлы переживают сессию, именно они доказали `bugs/08`. Здесь же замок `.voice-session.lock` |
+| `voice\out\candidates\<ПЕРСОНА>\` | **выдача владельцу на выслушку**: по ОДНОМУ файлу на вариант, все пять текстов кастинга подряд, громкость выровнена к −14 LUFS | форма задана владельцем дословно. У JARVIS: одобренный `espeech_bystree.mp3` + `piper_vihrov*.mp3` (обученный Piper) |
+| `voice\dataset_vihrov\` · `/opt/dataset_vihrov` (WSL) | обучающий корпус: 1185 реплик (~60 мин) + `metadata.csv` | ⚠️ боевой — тот, что в `/opt` (чтение через `/mnt` роняло загрузку GPU до 26%). Рядом `metadata.csv.before-guard` — состояние до лечения `bugs/18` |
+| `/opt/piper1-gpl` · `/opt/piper_train/vihrov` · `/opt/piper_ckpt` (WSL) | обучатель Piper с venv (Python 3.11, torch 2.13.0+cu130), выход обучения (чекпойнты + `config.json`), чекпойнт-донор `ru_RU/ruslan/medium` | venv собран через `uv`, **pip внутри нет**; ставить `uv pip install --python /opt/piper1-gpl/.venv/bin/python <пакет>` |
 | `mcp\web-search-mcp-v0.3.2\` | MCP-сервер веб-поиска | потенциальный инструмент для локального агента |
 | `nssm\` | Non-Sucking Service Manager | кандидат для «спит, пока не позовут» (Фаза 4) |
 | `tailscale_funnel_443.bat` | внешний доступ через Tailscale Funnel | Фаза 6 (доступ близким) |
