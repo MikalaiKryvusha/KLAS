@@ -40,8 +40,15 @@ OUT = os.environ.get("CLONE_OUT", "/mnt/f/KLAS/voice/out/clone")
 # латиницы в речи не остаётся ни одной буквы. Решение владельца о способе — канон 2026-07-29
 # («транслитерация кириллицей — второй способ самый хороший»).
 TRANSLIT = os.environ.get("TRANSLIT", "full")
-MODEL = "/opt/espeech/rl_v2/espeech_tts_rlv2.pt"
-VOCAB = "/opt/espeech/rl_v2/vocab.txt"
+# Веса сменные: под архитектуру F5 существует НЕСКОЛЬКО русских файнтюнов, и они запускаются одним
+# и тем же кодом — меняются только чекпойнт и vocab. Проверяем их «бесплатно», без второго скрипта:
+#   ESpeech RL-V2        — /opt/espeech/rl_v2/espeech_tts_rlv2.pt   (4000+ ч, дефолт)
+#   F5-TTS_RUSSIAN v4    — /opt/f5ru/F5TTS_v1_Base_v4_winter/model_212000.safetensors
+#                          (Misha24-10, 5000+ ч Common Voice/Sova/LibriHeavy + RUAccent)
+# ⛔ Оба ОДНОЯЗЫЧНЫЕ: английских фонем в них нет, отсюда TRANSLIT='full'. Мультиязычные кандидаты —
+# Qwen3-TTS и CosyVoice 3, у них отдельные скрипты.
+MODEL = os.environ.get("F5_MODEL", "/opt/espeech/rl_v2/espeech_tts_rlv2.pt")
+VOCAB = os.environ.get("F5_VOCAB", "/opt/espeech/rl_v2/vocab.txt")
 MODEL_CFG = dict(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4)
 
 argv = sys.argv[1:]
