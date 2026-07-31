@@ -23,7 +23,7 @@
 // [NOT-TESTED] — родился 2026-07-31.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const PY = 'F:\\KLAS\\voice\\venv-wakeword\\Scripts\\python.exe';
@@ -82,7 +82,16 @@ function runStage(flag, label) {
   // одной строки генерации шума) при импорте падает на `scipy.special.sph_harm`, которого в
   // scipy 1.18 больше нет. Прокладка восстанавливает функцию поверх `sph_harm_y` и делегирует
   // настоящему обучателю — апстрим не форкаем (класс EXP-0038, подробности в шапке шима).
-  const r = spawnSync(PY, [SHIM, '--training_config', configPath, flag], {
+  // ⚠️ `-X utf8` ОБЯЗАТЕЛЕН, и вот почему (поймано 2026-07-31 на первом же запуске).
+  // `train.py:635` читает конфиг как `open(args.training_config, 'r')` — БЕЗ указания кодировки.
+  // Python на этой машине берёт кодировку ЛОКАЛИ (cp1251), а наш конфиг в UTF-8 и с кириллицей
+  // (комментарии и `target_phrase: "Джарвис"`), поэтому запуск падал на
+  // `UnicodeDecodeError: 'charmap' codec can't decode byte 0x98`.
+  // Это тот же КЛАСС, что `bugs/08` и раздел «Windows + не-ASCII» канона, но с новым лицом: не мы
+  // гоним текст через аргументы, а ЧУЖАЯ библиотека читает НАШ файл кодировкой локали.
+  // Режим UTF-8 у интерпретатора — штатное лечение: апстрим не форкаем, конфиг не калечим.
+  // Ставится только флагом ДО старта интерпретатора, поэтому его нет в прокладке.
+  const r = spawnSync(PY, ['-X', 'utf8', SHIM, '--training_config', configPath, flag], {
     stdio: 'inherit',
     cwd: 'F:\\KLAS',
   });
@@ -94,14 +103,39 @@ function runStage(flag, label) {
 let augStatus = null;
 let trainStatus = null;
 
+// Аугментация даёт ЧЕТЫРЕ файла фич, и проверять надо все четыре.
+// ⚠️ Дефект МОЕГО ЖЕ охранника, пойманный 2026-07-31: сначала здесь проверялся только
+// `positive_features_train.npy`. Стадия успела записать именно его, упала на следующем шаге
+// (загрузка звука через отсутствующий torchcodec) — а охранник отрапортовал «✅ Фичи получены»
+// и пустил обучение на ЧЕТВЕРТИ данных. Ровно тот класс, за которым я охочусь у других:
+// охранник проверяет не то, что заявляет (EXP-0042).
+const FEATURE_FILES = [
+  'positive_features_train.npy', 'negative_features_train.npy',
+  'positive_features_test.npy', 'negative_features_test.npy',
+];
+
 if (STAGE === 'all' || STAGE === 'augment') {
+  // Недоделанный набор фич от прошлого прогона ОПАСНЕЕ его отсутствия: апстрим пропускает
+  // аугментацию, если `positive_features_train.npy` уже лежит (`train.py:755`), — то есть
+  // частичное состояние законсервировалось бы навсегда. Чистим перед стартом.
+  const present = FEATURE_FILES.filter((f) => existsSync(path.join(workDir, f)));
+  if (present.length && present.length < FEATURE_FILES.length) {
+    console.log(`⚠️ Найден НЕПОЛНЫЙ набор фич (${present.length}/${FEATURE_FILES.length}) от прошлого прогона — удаляю, иначе апстрим пропустит аугментацию.`);
+    for (const f of present) rmSync(path.join(workDir, f), { force: true });
+  }
+
   augStatus = runStage('--augment_clips', 'Стадия 1 — аугментация (реверберация + шум) и вычисление фич');
-  const feat = path.join(workDir, 'positive_features_train.npy');
-  if (!existsSync(feat)) {
-    console.error(`\n❌ Аугментация не дала ${path.basename(feat)} — дальше идти нельзя.`);
+
+  const missing = FEATURE_FILES.filter((f) => !existsSync(path.join(workDir, f)));
+  if (augStatus !== 0 || missing.length) {
+    console.error('\n❌ Аугментация не удалась — дальше идти нельзя.');
+    if (augStatus !== 0) console.error(`   код возврата ${augStatus} (у ЭТОЙ стадии он честный, в отличие от обучения)`);
+    if (missing.length) console.error(`   нет файлов фич: ${missing.join(', ')}`);
     process.exit(1);
   }
-  console.log(`✅ Фичи получены: ${(statSync(feat).size / 1024 ** 2).toFixed(1)} МБ`);
+  for (const f of FEATURE_FILES) {
+    console.log(`  ✅ ${f.padEnd(32)} ${(statSync(path.join(workDir, f)).size / 1024 ** 2).toFixed(1)} МБ`);
+  }
 }
 
 if (STAGE === 'all' || STAGE === 'train') {

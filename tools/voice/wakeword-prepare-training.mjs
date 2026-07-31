@@ -28,6 +28,11 @@ import path from 'node:path';
 const CORPUS_ROOT = 'F:\\KLAS\\voice\\wakeword\\corpus';
 const TRAIN_ROOT = 'F:\\KLAS\\voice\\wakeword\\training';
 const DATA_ROOT = 'F:\\KLAS\\voice\\wakeword\\data';
+const STUB_DIR = 'F:\\KLAS\\tools\\voice\\_piper_sample_generator_stub';
+
+// ⚠️ В шаблонной строке конфига ниже НЕЛЬЗЯ ставить обратные кавычки — они обрывают шаблон, и файл
+// перестаёт быть валидным JS. Поймано на себе 2026-07-31: комментарий с обратными кавычками внутри
+// конфига дал `SyntaxError: Unexpected identifier 'from'`. Родня симптома 9.2 канона.
 
 const argv = process.argv.slice(2);
 function arg(name, dflt) {
@@ -104,8 +109,13 @@ tts_batch_size: 50
 
 augmentation_batch_size: 16
 
-# Стадия --generate_clips не запускается, поэтому путь к их генератору не используется.
-piper_sample_generator_path: "./piper-sample-generator"
+# ⚠️ Указывает на нашу ЧЕСТНУЮ ЗАГЛУШКУ, а не на настоящий репозиторий, и это не лень.
+# train.py:638-639 кладёт этот путь в sys.path и импортирует из него generate_samples БЕЗУСЛОВНО,
+# на уровне модуля — ещё до того, как разберётся, какие стадии запрошены. Сама функция зовётся
+# только под --generate_clips, которую мы не запускаем (позитивы синтезированы своим
+# wakeword-corpus.mjs). Заглушка удовлетворяет импорт и ПАДАЕТ при вызове: молча вернуть пустоту
+# значило бы обучаться на пустом наборе позитивов с исправным видом (урок EXP-0046).
+piper_sample_generator_path: "${yml(STUB_DIR)}"
 
 output_dir: "${yml(TRAIN_ROOT)}"
 
