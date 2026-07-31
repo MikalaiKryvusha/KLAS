@@ -189,8 +189,37 @@ import openwakeword.data as _oww_data  # noqa: E402
 from numpy.lib.format import open_memmap  # noqa: E402
 
 
+def _close_memmaps_for(path) -> int:
+    """Закрыть ВСЕ отображения этого файла, где бы они ни жили.
+
+    ⚠️ Без этого прокладка бесполезна, и первая её версия именно поэтому и не сработала.
+    Держит файл не `trim_mmap`, а ВЫЗЫВАЮЩИЙ: `utils.py:571` открывает
+    `fp = open_memmap(output_file, mode='w+')`, пишет в него фичи и зовёт `trim_mmap(output_file)`
+    строкой 601, **не закрыв `fp`**. На Linux это безобидно, на Windows делает удаление невозможным.
+    Закрывать чужое отображение здесь безопасно: `trim_mmap` — ПОСЛЕДНЯЯ строка той функции,
+    после неё `fp` уже не используется.
+    """
+    import warnings
+    target = os.path.normcase(os.path.abspath(str(path)))
+    closed = 0
+    # Обход всех живых объектов трогает ленивые атрибуты чужих модулей и вызывает их
+    # предупреждения об устаревании (например, torch.distributed.reduce_op). Это шум обхода,
+    # а не наша проблема, и он повторился бы на каждом из четырёх файлов фич.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for obj in gc.get_objects():
+            try:
+                if isinstance(obj, np.memmap) and obj.filename and \
+                        os.path.normcase(os.path.abspath(str(obj.filename))) == target:
+                    obj._mmap.close()
+                    closed += 1
+            except (AttributeError, ValueError, ReferenceError, BufferError):
+                continue
+    return closed
+
+
 def _trim_mmap_windows_safe(mmap_path):
-    """Замена `openwakeword.data.trim_mmap`, не удаляющая файл, который сама же держит открытым."""
+    """Замена `openwakeword.data.trim_mmap`, работающая на Windows."""
     src = np.load(mmap_path, mmap_mode="r")
 
     # Ищем последнюю НЕпустую строку — логика апстрима сохранена дословно.
@@ -207,10 +236,13 @@ def _trim_mmap_windows_safe(mmap_path):
         dst[start:end] = src[start:end]
     dst.flush()
 
-    # ⚠️ Вот ради чего вся прокладка: отпустить ОБА отображения до os.remove.
+    # ⚠️ Вот ради чего вся прокладка: отпустить ВСЕ отображения файла до os.remove — и свои,
+    # и чужое `fp` вызывающего (см. докстринг `_close_memmaps_for`).
     dst._mmap.close()
     src._mmap.close()
     del dst, src
+    gc.collect()
+    _close_memmaps_for(mmap_path)
     gc.collect()
 
     os.remove(mmap_path)
@@ -218,8 +250,14 @@ def _trim_mmap_windows_safe(mmap_path):
 
 
 def _selftest_trim_mmap() -> None:
-    """Проверка ЧИСЛАМИ: файл с хвостом пустых строк обязан ужаться ровно до числа непустых,
-    а уцелевшие данные — совпасть побайтово. Прокладка, которая «не падает», ещё ничего не значит."""
+    """Проверка ЧИСЛАМИ и в НАСТОЯЩИХ условиях отказа.
+
+    ⚠️ Первая версия этой самопроверки была слабой и потому пропустила дефект: она закрывала
+    отображение перед вызовом, а в бою вызывающий (`utils.py:571`) держит своё `fp` ОТКРЫТЫМ.
+    Проверка, не воспроизводящая настоящее условие отказа, доказывает только сама себя
+    (`BUG_FIXING_FRAMEWORK.md` → «подай охраннику ровно тот дефект, ради которого он существует»).
+    Поэтому здесь `arr` НАМЕРЕННО остаётся открытым на момент вызова.
+    """
     import tempfile
     rows_full, rows_empty, shape = 7, 5, (16, 96)
     with tempfile.TemporaryDirectory() as d:
@@ -229,10 +267,8 @@ def _selftest_trim_mmap() -> None:
         arr[rows_full:] = 0.0
         expected = np.array(arr[:rows_full])
         arr.flush()
-        arr._mmap.close()
-        del arr
-        gc.collect()
 
+        # ⭐ `arr` НЕ закрывается — воспроизводим ровно то, что делает вызывающий в бою.
         _trim_mmap_windows_safe(p)
 
         got = np.load(p, mmap_mode="r")
