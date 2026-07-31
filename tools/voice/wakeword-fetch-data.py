@@ -29,8 +29,13 @@
 # [NOT-TESTED] — родился 2026-07-31.
 
 import os
+import subprocess
 import sys
 from pathlib import Path
+
+# Построчная выдача обязательна: при буферизации лог отстаёт от реальности, и наблюдать за долгой
+# загрузкой приходится по файлам на диске вместо собственного вывода (поймано 2026-07-31 на себе).
+sys.stdout.reconfigure(line_buffering=True)
 
 DATA_ROOT = Path(r"F:\KLAS\voice\wakeword\data")
 
@@ -76,6 +81,35 @@ def get_file(repo: str, filename: str, dest: Path, label: str) -> None:
     print(f"  ✅ {p.name} — {mb(p)}")
 
 
+def get_big_file_via_curl(repo: str, filename: str, dest: Path, label: str) -> Path:
+    """Крупные файлы качаем curl'ом, а НЕ huggingface_hub. Причина измерена, а не предположена.
+
+    ⚠️ ДЕФЕКТ БИБЛИОТЕКИ (huggingface_hub 1.26.0, движок хранения Xet), поймано 2026-07-31:
+    при загрузке 16-гигабайтного .npy процесс копил данные В ОПЕРАТИВНОЙ ПАМЯТИ, а на диск не писал
+    ничего. Замер: рабочий набор рос 1816 → 2022 МБ за 20 секунд (~10 МБ/с), а размер целевого
+    каталога стоял на 0.18 ГБ. При 16 ГБ файла и 7.5 ГБ свободной памяти это гарантированно
+    выдавливает машину в файл подкачки — сценарий, который в этом проекте уже стоил вечера.
+    Штатного выключателя движка в 1.26 нет (искал `DISABLE_XET`, `is_xet_available` — не найдено).
+
+    curl пишет ПОТОКОМ на диск: замер того же файла — 9 МБ памяти, размер растёт на диске.
+    `-C -` даёт докачку, поэтому обрыв связи не начинает всё заново.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    out = dest / Path(filename).name
+    url = f"https://huggingface.co/datasets/{repo}/resolve/main/{filename}"
+    print(f"\n▶ {label} (curl — см. дефект huggingface_hub в докстринге)\n  {url}")
+    r = subprocess.run(
+        ["curl", "-L", "-C", "-", "--retry", "8", "--retry-delay", "5", "--retry-all-errors",
+         "-o", str(out), url],
+        check=False,
+    )
+    if r.returncode != 0:
+        print(f"  ❌ curl вернул {r.returncode}")
+    else:
+        print(f"  ✅ {out.name} — {mb(out)}")
+    return out
+
+
 # --- 1. Импульсные характеристики комнат (30.5 МБ) -------------------------------------------------
 print("=" * 70)
 print("1/4 · Импульсные характеристики 271 реальной комнаты (MIT)")
@@ -112,9 +146,9 @@ if SKIP_BIG:
     print("4/4 · ПРОПУЩЕНО (--skip-big): предвычисленные негативы ACAV100M, 16.09 ГБ")
 else:
     print("4/4 · Предвычисленные негативы ACAV100M (~2000 ч) — 16.09 ГБ, это надолго")
-    get_file("davidscripka/openwakeword_features",
-             "openwakeword_features_ACAV100M_2000_hrs_16bit.npy",
-             DATA_ROOT / "features", "негативы ACAV100M")
+    get_big_file_via_curl("davidscripka/openwakeword_features",
+                          "openwakeword_features_ACAV100M_2000_hrs_16bit.npy",
+                          DATA_ROOT / "features", "негативы ACAV100M")
 
 # --- Охранник --------------------------------------------------------------------------------------
 # Класс EXP-0042: охранник, считающий пустоту успехом, — не охранник. Проверяем то, чем загрузка
