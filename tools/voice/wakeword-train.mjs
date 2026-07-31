@@ -64,6 +64,20 @@ if (missing.length) {
   process.exit(1);
 }
 
+// ⚠️ Проверяем `onnxscript` ДО обучения, а не после. Он нужен `torch.onnx.export` в torch 2.13, и
+// без него обучение честно отрабатывает все 50 000 шагов, а падает НА ЭКСПОРТЕ — то есть теряется
+// 18 минут работы и сама обученная модель, оставшаяся только в памяти процесса.
+// Эти грабли в проекте УЖЕ записаны: та же пометка стоит в харнессе про экспорт голоса Piper.
+// Секунда проверки здесь стоит восемнадцати минут там.
+if (STAGE !== 'augment') {
+  const probe = spawnSync(PY, ['-X', 'utf8', '-c', 'import onnxscript'], { stdio: 'pipe' });
+  if (probe.status !== 0) {
+    console.error('❌ Нет пакета `onnxscript` — обучение отработает, но экспорт ONNX упадёт в самом конце.');
+    console.error(`   Лечение: ${PY} -m pip install onnxscript`);
+    process.exit(1);
+  }
+}
+
 // Отдельно ловим ОБРЕЗАННЫЙ большой файл: он существует, но недокачан — самый коварный случай,
 // потому что проверка «файл есть» его пропускает, а обучение падает через час.
 const bigPath = path.join(DATA_ROOT, 'features', 'openwakeword_features_ACAV100M_2000_hrs_16bit.npy');
@@ -163,6 +177,26 @@ if (STAGE === 'all' || STAGE === 'train') {
       console.log('   ⚠️ Ненулевой код возврата ОЖИДАЕМ: апстрим последней строкой конвертирует в');
       console.log('      tflite через TensorFlow, которого у нас нет намеренно. ONNX сохранён строкой');
       console.log('      выше и цел — судим по файлу, а не по коду (см. шапку этого скрипта).');
+    }
+    // ⚠️ «Файл есть» — ещё не «модель работает». Экспортёр torch 2.13 не смог выдать запрошенный
+    // opset 13 и откатился на 18; молча несовместимая с боевым рантаймом модель выглядела бы как
+    // успех, а обнаружилась бы на замере. Поэтому грузим её ТЕМ ЖЕ onnxruntime, что в бою, и
+    // прогоняем настоящий вход.
+    const check = spawnSync(PY, ['-X', 'utf8', '-c', [
+      'import onnxruntime as ort, numpy as np, sys',
+      `s = ort.InferenceSession(r"${onnxPath}", providers=["CPUExecutionProvider"])`,
+      'i = s.get_inputs()[0]; o = s.get_outputs()[0]',
+      'shape = [d if isinstance(d, int) else 1 for d in i.shape]',
+      'y = s.run(None, {i.name: np.zeros(shape, dtype=np.float32)})[0]',
+      'print(f"вход {i.name} {i.shape} -> выход {o.name} {y.shape}, значение {float(y.ravel()[0]):.6f}")',
+      'sys.exit(0 if np.isfinite(y).all() else 1)',
+    ].join('\n')], { stdio: 'pipe', encoding: 'utf8' });
+    if (check.status === 0) {
+      console.log(`   ✅ модель загружена боевым onnxruntime: ${check.stdout.trim()}`);
+    } else {
+      console.error('\n❌ Модель ЭКСПОРТИРОВАНА, но не грузится боевым onnxruntime — она непригодна:');
+      console.error((check.stderr || check.stdout || '').trim().split('\n').slice(-6).join('\n'));
+      process.exit(1);
     }
     console.log('\nДальше — замер: voice\\venv-wakeword\\Scripts\\python.exe tools/voice/wakeword-probe.py');
   } else {
