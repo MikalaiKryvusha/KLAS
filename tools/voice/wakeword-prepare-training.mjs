@@ -112,12 +112,13 @@ output_dir: "${yml(TRAIN_ROOT)}"
 rir_paths:
   - "${yml(path.join(DATA_ROOT, 'mit_rirs'))}"
 
+# ⛔ Не AudioSet и не FMA, как в ноутбуке апстрима: обе ссылки протухли (проверено 2026-07-31 —
+# AudioSet переехал на parquet, FMA стал датасетом-скриптом, которые выпилили в datasets 5.x).
+# Здесь шумы из RIRS_NOISES (openslr 28): точечные из MUSAN + изотропные из RWCP/REVERB/AIR.
 background_paths:
-  - "${yml(path.join(DATA_ROOT, 'audioset'))}"
-  - "${yml(path.join(DATA_ROOT, 'fma'))}"
+  - "${yml(path.join(DATA_ROOT, 'background'))}"
 
 background_paths_duplication_rate:
-  - 1
   - 1
 
 false_positive_validation_data_path: "${yml(path.join(DATA_ROOT, 'features', 'validation_set_features.npy'))}"

@@ -127,16 +127,52 @@ print("2/4 · Набор проверки ЛОЖНЫХ СРАБАТЫВАНИЙ 
 get_file("davidscripka/openwakeword_features", "validation_set_features.npy",
          DATA_ROOT / "features", "набор проверки")
 
-# --- 3. Фоновый шум и музыка -----------------------------------------------------------------------
+# --- 3. Фоновый шум ---------------------------------------------------------------------------------
+#
+# ⛔ РЕЦЕПТ АПСТРИМА ПРОТУХ — проверено 2026-07-31, обе ссылки из их ноутбука мертвы по-разному:
+#   · `agkphysics/AudioSet` больше НЕ отдаёт `bal_train09.tar` — датасет переехал на parquet
+#     (`data/bal_train/00.parquet` и соседи); поиск по имени тарбола даёт 0 совпадений из 946 файлов;
+#   · `rudraml/fma` — датасет-СКРИПТ из трёх файлов (`fma.py`), а поддержку скриптовых датасетов
+#     выпилили в `datasets` 5.x.
+# Молчаливое следствие, на котором легко погореть: каталоги `background_paths` просто не создаются,
+# а падает всё гораздо позже — внутри аугментации, на `os.scandir` несуществующего пути.
+#
+# Берём запасной вариант, вписанный в `researches/22` §2 ещё до того, как он понадобился:
+# **RIRS_NOISES (openslr.org/28)** — 1.3 ГБ, Apache-2.0, и в нём РАЗОМ импульсные характеристики и
+# точечные шумы (извлечённые из MUSAN) плюс изотропные шумы из RWCP/REVERB/AIR. Один файл вместо двух
+# протухших источников — и это ровно те данные, на которых стоит работа Ko и др. (ICASSP 2017).
 print("\n" + "=" * 70)
-print("3/4 · Фоновый шум (шард AudioSet) и музыка (FMA)")
-audioset = find_in_repo("agkphysics/AudioSet", "bal_train09.tar")
-if audioset:
-    get_file("agkphysics/AudioSet", audioset, DATA_ROOT / "audioset", "шард AudioSet")
+print("3/4 · Фоновый шум — RIRS_NOISES (openslr 28), замена протухшим AudioSet и FMA")
 
-fma = find_in_repo("rudraml/fma", "fma_small")
-if fma:
-    get_file("rudraml/fma", fma, DATA_ROOT / "fma", "музыка FMA small")
+import zipfile  # noqa: E402
+
+rirs_zip = DATA_ROOT / "rirs_noises.zip"
+background = DATA_ROOT / "background"
+if not rirs_zip.exists():
+    print("  качаю rirs_noises.zip (1.3 ГБ)")
+    subprocess.run(
+        ["curl", "-L", "-C", "-", "--retry", "8", "--retry-delay", "5", "--retry-all-errors",
+         "-o", str(rirs_zip), "https://www.openslr.org/resources/28/rirs_noises.zip"],
+        check=False,
+    )
+
+if rirs_zip.exists() and not any(background.glob("*.wav")):
+    background.mkdir(parents=True, exist_ok=True)
+    # Берём ТОЛЬКО шумы: реверберацию нам даёт набор MIT (271 комната, 30 МБ), он уже скачан выше.
+    # Смешивать два источника импульсных характеристик незачем — лишняя сущность без выигрыша.
+    wanted = ("pointsource_noises/", "real_rirs_isotropic_noises/")
+    n = 0
+    with zipfile.ZipFile(rirs_zip) as z:
+        for item in z.namelist():
+            if item.endswith(".wav") and any(w in item for w in wanted):
+                # Раскладываем ПЛОСКО: augment_clips делает os.scandir по одному уровню и во
+                # вложенные каталоги не спускается.
+                with z.open(item) as src, open(background / Path(item).name, "wb") as dst:
+                    dst.write(src.read())
+                n += 1
+    print(f"  ✅ извлечено {n} файлов шума в {background} — {mb(background)}")
+elif any(background.glob("*.wav")):
+    print(f"  ✅ шум уже на месте — {mb(background)}")
 
 # --- 4. Главный файл: предвычисленные негативы (16.09 ГБ) ------------------------------------------
 # Идёт ПОСЛЕДНИМ намеренно: если связь оборвётся, мелкие и быстрые наборы уже лежат, и работа по
