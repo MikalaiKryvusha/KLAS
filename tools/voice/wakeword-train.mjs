@@ -23,7 +23,7 @@
 // [NOT-TESTED] — родился 2026-07-31.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const PY = 'F:\\KLAS\\voice\\venv-wakeword\\Scripts\\python.exe';
@@ -122,6 +122,18 @@ if (STAGE === 'all' || STAGE === 'augment') {
   if (present.length && present.length < FEATURE_FILES.length) {
     console.log(`⚠️ Найден НЕПОЛНЫЙ набор фич (${present.length}/${FEATURE_FILES.length}) от прошлого прогона — удаляю, иначе апстрим пропустит аугментацию.`);
     for (const f of present) rmSync(path.join(workDir, f), { force: true });
+  }
+
+  // Обрезка пишет промежуточную копию рядом и переименовывает её в конце. Прогон, упавший МЕЖДУ
+  // этими двумя шагами, оставляет её на диске — и такие огрызки копятся молча, занимая по 50+ МБ
+  // и сбивая с толку того, кто заглянет в каталог. Чистим.
+  // ⚠️ Имён два, потому что у апстрима в этом месте латентный ляп: `mmap_path.strip(".npy")` снимает
+  // СИМВОЛЫ из набора, а не суффикс, и съедает хвостовую «n» слова «train» → `..._trai2.npy`.
+  // Наша прокладка отсекает суффикс правильно → `..._train2.npy`. На диске могут лежать оба.
+  const strays = readdirSync(workDir).filter((f) => /2\.npy$/.test(f));
+  if (strays.length) {
+    console.log(`🧹 Огрызки прошлых обрезок: ${strays.join(', ')} — удаляю.`);
+    for (const f of strays) rmSync(path.join(workDir, f), { force: true });
   }
 
   augStatus = runStage('--augment_clips', 'Стадия 1 — аугментация (реверберация + шум) и вычисление фич');
