@@ -25,6 +25,7 @@
 #
 # [NOT-TESTED] — родился 2026-07-31.
 
+import os
 import runpy
 import sys
 
@@ -164,6 +165,88 @@ def _selftest_torchaudio_shim() -> None:
 
 
 _selftest_torchaudio_shim()
+
+
+# --- ПРОКЛАДКА 3: trim_mmap, пригодный для Windows ------------------------------------------------
+#
+# `openwakeword/data.py:trim_mmap` отрезает у файла фич хвост пустых строк так: открывает исходник
+# отображением в память (`np.load(..., mmap_mode='r')`), копирует нужное в новый файл, затем
+# `os.remove(исходник)` и переименовывает. На Linux удалить открытый файл законно — ссылка исчезает,
+# данные живут до закрытия. **На Windows это запрещено**, и стадия падает НА САМОМ КОНЦЕ, потратив
+# всё время вычисления фич:
+#     PermissionError: [WinError 32] файл занят другим процессом: positive_features_train.npy
+#
+# Лечение — закрыть оба отображения ДО удаления. Апстрим не форкаем: подменяем функцию в его модуле,
+# благо `utils.py:563` импортирует её ВНУТРИ тела (то есть в момент вызова), и подмена доедет.
+#
+# Заодно чиню их латентный ляп: `mmap_path.strip(".npy")` — это `str.strip`, который снимает СИМВОЛЫ
+# из набора, а не суффикс. Для `positive_features_train.npy` он съедает и хвостовую «n» слова
+# «train», давая `..._trai2.npy`. Их код это переживает (файл потом переименовывается обратно), но
+# повторять ошибку в своей замене незачем.
+import gc  # noqa: E402
+
+import openwakeword.data as _oww_data  # noqa: E402
+from numpy.lib.format import open_memmap  # noqa: E402
+
+
+def _trim_mmap_windows_safe(mmap_path):
+    """Замена `openwakeword.data.trim_mmap`, не удаляющая файл, который сама же держит открытым."""
+    src = np.load(mmap_path, mmap_mode="r")
+
+    # Ищем последнюю НЕпустую строку — логика апстрима сохранена дословно.
+    i = -1
+    while np.all(src[i, :, :] == 0):
+        i -= 1
+    n_new = src.shape[0] + i + 1
+
+    tmp_path = str(mmap_path)[:-4] + "2.npy" if str(mmap_path).endswith(".npy") else str(mmap_path) + "2.npy"
+    dst = open_memmap(tmp_path, mode="w+", dtype=np.float32,
+                      shape=(n_new, src.shape[1], src.shape[2]))
+    for start in range(0, n_new, 1024):
+        end = min(start + 1024, n_new)
+        dst[start:end] = src[start:end]
+    dst.flush()
+
+    # ⚠️ Вот ради чего вся прокладка: отпустить ОБА отображения до os.remove.
+    dst._mmap.close()
+    src._mmap.close()
+    del dst, src
+    gc.collect()
+
+    os.remove(mmap_path)
+    os.rename(tmp_path, mmap_path)
+
+
+def _selftest_trim_mmap() -> None:
+    """Проверка ЧИСЛАМИ: файл с хвостом пустых строк обязан ужаться ровно до числа непустых,
+    а уцелевшие данные — совпасть побайтово. Прокладка, которая «не падает», ещё ничего не значит."""
+    import tempfile
+    rows_full, rows_empty, shape = 7, 5, (16, 96)
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "probe.npy")
+        arr = open_memmap(p, mode="w+", dtype=np.float32, shape=(rows_full + rows_empty, *shape))
+        arr[:rows_full] = np.arange(rows_full * shape[0] * shape[1], dtype=np.float32).reshape(rows_full, *shape) + 1.0
+        arr[rows_full:] = 0.0
+        expected = np.array(arr[:rows_full])
+        arr.flush()
+        arr._mmap.close()
+        del arr
+        gc.collect()
+
+        _trim_mmap_windows_safe(p)
+
+        got = np.load(p, mmap_mode="r")
+        assert got.shape == (rows_full, *shape), f"форма {got.shape} вместо {(rows_full, *shape)}"
+        assert np.array_equal(np.array(got), expected), "данные после обрезки не совпали с исходными"
+        got._mmap.close()
+        del got
+        gc.collect()
+    print(f"[прокладка] trim_mmap для Windows: самопроверка пройдена "
+          f"({rows_full + rows_empty} строк ужаты до {rows_full}, данные совпали побайтово)", flush=True)
+
+
+_oww_data.trim_mmap = _trim_mmap_windows_safe
+_selftest_trim_mmap()
 
 # Делегируем настоящему обучателю. sys.argv уже содержит наши аргументы: runpy отдаст их модулю
 # как есть, а `run_name='__main__'` заставит его выполнить свой блок разбора аргументов.
