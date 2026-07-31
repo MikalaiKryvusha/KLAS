@@ -130,3 +130,6 @@ Desktop.ini
 /screenrec/
 # Стенд бисекции движка (tools/llamacpp-probe.mjs): распакованные билды llama.cpp, ~150 МБ каждый
 /llamacpp-probe/
+.kaif/install/
+KAIF_UPDATE_TASK.superseded.md
+.kaif/heartbeat.log

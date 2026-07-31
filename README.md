@@ -408,7 +408,7 @@ Node.js версии 20 и выше, стандарт ESM — установщи
 ## Управляется через KAIF
 
 Разработку ведёт тандем «человек-визионер + ИИ-агент» на фреймворке
-**[KAIF](https://github.com/MikalaiKryvusha/KAIF)** (**v1.6**). **KLAS ≠ KAIF:** KAIF —
+**[KAIF](https://github.com/MikalaiKryvusha/KAIF)** (**v2.1**). **KLAS ≠ KAIF:** KAIF —
 вспомогательный dev-фреймворк, развёрнутый локально в помощь разработке KLAS; для KLAS он
 3rd-party-инструмент и в этот репозиторий не упаковывается.
 
@@ -824,7 +824,7 @@ and free.
 ## Managed by KAIF
 
 Development runs as a human-visionary + AI-agent tandem on the
-**[KAIF](https://github.com/MikalaiKryvusha/KAIF)** framework (**v1.6**). **KLAS ≠ KAIF:** KAIF is
+**[KAIF](https://github.com/MikalaiKryvusha/KAIF)** framework (**v2.1**). **KLAS ≠ KAIF:** KAIF is
 an auxiliary dev framework deployed locally to help build KLAS — for KLAS it is a 3rd-party tool
 and is not vendored into this repository.
 

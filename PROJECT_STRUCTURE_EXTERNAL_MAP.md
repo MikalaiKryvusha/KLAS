@@ -33,10 +33,10 @@
 ├── logo/                                # бренд-ассеты: KLAS.jpg (OG 1200×630, hero README), исходники
 ├── package.json                         # kaif:* handles (npm run kaif:version / kaif:check / kaif:update)
 ├── .kaif/kaif.json                      # маркер деплоя KAIF: версия, сфера, язык, агент-системы, tracking
-├── .kaif/kaif-core.mjs                  # машинерия KAIF 1.6 — реализация npm run kaif:* (заменила tools/kaif.mjs)
+├── .kaif/kaif-core.mjs                  # машинерия KAIF 2.1 — реализация npm run kaif:* (заменила tools/kaif.mjs)
 ├── .kaif/deploy-manifest.json           # sha256-слепки развёрнутых файлов (по ним update отличает нетронутое от разошедшегося)
 ├── .kaif/spheres/                       # библиотеки сфер (терминология + дисциплина исполнения домена)
-├── .claude/skills/<name>/SKILL.md       # 26 скиллов-ритуалов (/resume, /pause, циклы, fable-*, /experience)
+├── .claude/skills/<name>/SKILL.md       # 34 скилла-ритуала (/resume, /pause, /end-chat, циклы, fable-*, лестница планирования)
 ├── .roo/ .agents/ .grok/ .cline/        # те же скиллы для Zoo Code / Codex / Grok Build / Cline (копии канона)
 ├── tools/                               # инструменты проекта и скрипты харнесса
 │   ├── voice-say.mjs voice-hear.mjs voice-talk.mjs voice-bench.mjs voice-roundtrip.mjs
