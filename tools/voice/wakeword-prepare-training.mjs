@@ -22,7 +22,7 @@
 //
 // [NOT-TESTED] — родился 2026-07-31.
 
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const CORPUS_ROOT = 'F:\\KLAS\\voice\\wakeword\\corpus';
@@ -109,8 +109,12 @@ piper_sample_generator_path: "./piper-sample-generator"
 
 output_dir: "${yml(TRAIN_ROOT)}"
 
+# ⚠️ Путь указывает на ВЛОЖЕННЫЙ 16khz, а не на mit_rirs. Апстрим делает os.scandir по ОДНОМУ
+# уровню и во вложенные каталоги не спускается — а снимок HuggingFace кладёт wav именно в 16khz,
+# оставляя наверху только он и .cache. Указав mit_rirs, мы скормили бы аугментации два КАТАЛОГА
+# вместо 270 импульсных характеристик.
 rir_paths:
-  - "${yml(path.join(DATA_ROOT, 'mit_rirs'))}"
+  - "${yml(path.join(DATA_ROOT, 'mit_rirs', '16khz'))}"
 
 # ⛔ Не AudioSet и не FMA, как в ноутбуке апстрима: обе ссылки протухли (проверено 2026-07-31 —
 # AudioSet переехал на parquet, FMA стал датасетом-скриптом, которые выпилили в datasets 5.x).
@@ -157,6 +161,21 @@ console.log(`Конфиг: ${configPath}`);
 
 // --- Охранник --------------------------------------------------------------------------------------
 const problems = [];
+
+// ⭐ Охранник ЦЕЛОГО КЛАССА: «каталог указан» ≠ «в каталоге есть что читать».
+// Апстрим берёт данные аугментации через `os.scandir(путь)` — обход РОВНО ОДНОГО уровня. Каталог,
+// у которого wav лежат во вложенной папке (ровно так HuggingFace кладёт импульсные характеристики:
+// наверху только `16khz` и `.cache`), пройдёт любую проверку «путь существует» и развалится ЧАСОМ
+// ПОЗЖЕ, внутри аугментации. Поэтому считаем именно то, что увидит апстрим: wav на первом уровне.
+for (const [dir, label, min] of [
+  [path.join(DATA_ROOT, 'mit_rirs', '16khz'), 'импульсных характеристик комнат', 100],
+  [path.join(DATA_ROOT, 'background'), 'файлов фонового шума', 100],
+]) {
+  const n = existsSync(dir) ? readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.wav')).length : 0;
+  console.log(`  ${label.padEnd(34)} ${n} (на ПЕРВОМ уровне ${dir})`);
+  if (n < min) problems.push(`${label}: ${n} на первом уровне каталога ${dir} — апстрим не спускается во вложенные`);
+}
+
 if (counts.positive_train < 100) problems.push(`положительных для обучения всего ${counts.positive_train}`);
 if (counts.positive_test < 10) problems.push(`положительных для проверки всего ${counts.positive_test}`);
 if (counts.negative_train < 10) problems.push(`отрицательных для обучения всего ${counts.negative_train}`);
