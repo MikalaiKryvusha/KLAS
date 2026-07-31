@@ -136,6 +136,13 @@ const WORD = arg('word', 'Джарвис');
 const SLUG = arg('slug', 'jarvis');          // латиницей: имя каталога и будущей .onnx-модели
 const PLAN_ONLY = argv.includes('--plan');   // посчитать объём, не занимая процессор
 
+// Сколько РАЗ синтезировать каждую комбинацию. Ручка существует потому, что эталонный конфиг
+// openWakeWord просит `n_samples: 10000` положительных на имя (`researches/22` §3), а полное
+// декартово произведение даёт всего 400. Повтор бесплатен по разнообразию: VITS сэмплирует шум на
+// каждый вызов, поэтому второй синтез того же текста тем же голосом даёт ДРУГОЙ звук (замер в шапке).
+// 25 повторов × 400 комбинаций = 10 000 положительных ≈ 34 минуты процессора.
+const REPEATS = Math.max(1, parseInt(arg('repeats', '1'), 10) || 1);
+
 // --- Синтез --------------------------------------------------------------------------------------
 function makeTts(voice) {
   const dir = path.join(MODELS, `vits-piper-ru_RU-${voice}-medium`);
@@ -174,13 +181,13 @@ const outDir = path.join(CORPUS_ROOT, SLUG);
 const posDir = path.join(outDir, 'positive');
 const negDir = path.join(outDir, 'negative');
 
-const posCount = VOICES.length * SPEEDS.length * FRAMINGS.length;
-const negCount = VOICES.length * NEGATIVES.length;
+const posCount = VOICES.length * SPEEDS.length * FRAMINGS.length * REPEATS;
+const negCount = VOICES.length * NEGATIVES.length * REPEATS;
 
 console.log(`СЛОВО: «${WORD}»  (каталог: ${SLUG})`);
-console.log(`Дикторы: ${VOICES.join(', ')}  ·  темпы: ${SPEEDS.join(', ')}`);
-console.log(`Положительных: ${VOICES.length} × ${SPEEDS.length} × ${FRAMINGS.length} = ${posCount}`);
-console.log(`Отрицательных: ${VOICES.length} × ${NEGATIVES.length} = ${negCount}`);
+console.log(`Дикторы: ${VOICES.join(', ')}  ·  темпы: ${SPEEDS.join(', ')}  ·  повторов: ${REPEATS}`);
+console.log(`Положительных: ${VOICES.length} × ${SPEEDS.length} × ${FRAMINGS.length} × ${REPEATS} = ${posCount}`);
+console.log(`Отрицательных: ${VOICES.length} × ${NEGATIVES.length} × ${REPEATS} = ${negCount}`);
 console.log(`Всего клипов: ${posCount + negCount}`);
 console.log(`Каталог: ${outDir}`);
 
@@ -204,23 +211,27 @@ for (const voice of VOICES) {
   const tts = makeTts(voice);
 
   // положительные
-  for (const speed of SPEEDS) {
-    FRAMINGS.forEach((framing, fi) => {
-      const text = framing.replace('{W}', WORD);
-      const name = `pos__${voice}__s${String(speed).replace('.', '')}__f${String(fi).padStart(2, '0')}.wav`;
-      const sec = synthesize(tts, text, speed, path.join(posDir, name));
-      totalSeconds += sec;
-      manifest.push({ file: `positive/${name}`, voice, speed, text, seconds: +sec.toFixed(3) });
-    });
+  for (let rep = 0; rep < REPEATS; rep++) {
+    for (const speed of SPEEDS) {
+      FRAMINGS.forEach((framing, fi) => {
+        const text = framing.replace('{W}', WORD);
+        const name = `pos__${voice}__s${String(speed).replace('.', '')}__f${String(fi).padStart(2, '0')}__r${String(rep).padStart(2, '0')}.wav`;
+        const sec = synthesize(tts, text, speed, path.join(posDir, name));
+        totalSeconds += sec;
+        manifest.push({ file: `positive/${name}`, voice, speed, text, seconds: +sec.toFixed(3) });
+      });
+    }
   }
 
   // отрицательные — на нормальном темпе: их задача дать фон и ловушки, а не покрыть края темпа
-  NEGATIVES.forEach((text, ni) => {
-    const name = `neg__${voice}__n${String(ni).padStart(2, '0')}.wav`;
-    const sec = synthesize(tts, text, 1.0, path.join(negDir, name));
-    totalSeconds += sec;
-    manifest.push({ file: `negative/${name}`, voice, speed: 1.0, text, seconds: +sec.toFixed(3) });
-  });
+  for (let rep = 0; rep < REPEATS; rep++) {
+    NEGATIVES.forEach((text, ni) => {
+      const name = `neg__${voice}__n${String(ni).padStart(2, '0')}__r${String(rep).padStart(2, '0')}.wav`;
+      const sec = synthesize(tts, text, 1.0, path.join(negDir, name));
+      totalSeconds += sec;
+      manifest.push({ file: `negative/${name}`, voice, speed: 1.0, text, seconds: +sec.toFixed(3) });
+    });
+  }
 
   console.log(`  ${voice}: готов за ${((Date.now() - tv) / 1000).toFixed(1)} с`);
 }
