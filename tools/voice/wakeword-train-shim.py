@@ -343,7 +343,145 @@ def _selftest_lazy_module() -> None:
 
 _selftest_lazy_module()
 
-# Делегируем настоящему обучателю. sys.argv уже содержит наши аргументы: runpy отдаст их модулю
-# как есть, а `run_name='__main__'` заставит его выполнить свой блок разбора аргументов.
-sys.argv[0] = "openwakeword.train"
-runpy.run_module("openwakeword.train", run_name="__main__")
+
+# --- ПРОКЛАДКА 5: загрузчик данных в ОДИН процесс -------------------------------------------------
+#
+# Симптом:
+#     RuntimeError: An attempt has been made to start a new process before the current process
+#     has finished its bootstrapping phase.
+#
+# `train.py:864-865` создаёт `DataLoader(IterDataset(batch_generator), num_workers=n_cpus)`.
+# На Linux дочерние процессы делаются fork'ом и наследуют состояние родителя даром. **На Windows
+# доступен только spawn**: дочерний процесс ЗАНОВО импортирует главный модуль (то есть этот файл) и
+# должен получить датасет через сериализацию. Здесь ломается и то, и другое:
+#   1) повторный импорт главного модуля перезапустил бы обучение (лечится защитой `__main__` внизу);
+#   2) `IterDataset` обёрнут вокруг ГЕНЕРАТОРА, а генераторы не сериализуются в принципе —
+#      этой стены не обойти никакой защитой импорта.
+#
+# Поэтому загрузчик переводится в один процесс. Цена честная и небольшая: данные лежат
+# отображёнными в память, а модель крошечная (голова над готовыми эмбеддингами) — узкое место здесь
+# видеокарта, а не подача.
+# ⚠️ `prefetch_factor` и `persistent_workers` осмысленны только при рабочих процессах: свежий torch
+# на них ругается, если оставить их вместе с `num_workers=0`, — поэтому снимаем вместе.
+_ORIG_DATALOADER = torch.utils.data.DataLoader
+
+
+class _SingleProcessDataLoader(_ORIG_DATALOADER):
+    def __init__(self, *args, **kwargs):
+        if kwargs.get("num_workers", 0):
+            kwargs["num_workers"] = 0
+            kwargs.pop("prefetch_factor", None)
+            kwargs.pop("persistent_workers", None)
+        super().__init__(*args, **kwargs)
+
+
+torch.utils.data.DataLoader = _SingleProcessDataLoader
+
+
+def _selftest_dataloader() -> None:
+    """Проверка НА ТОЙ ЖЕ форме, что в бою: датасет поверх генератора и запрошенные рабочие процессы.
+    Без прокладки это на Windows падает; с ней — обязано отдать ровно те данные, что подавали."""
+    class _GenDataset(torch.utils.data.IterableDataset):
+        def __init__(self, gen):
+            self.gen = gen
+
+        def __iter__(self):
+            return self.gen
+
+    expected = [torch.full((2, 3), float(i)) for i in range(4)]
+    dl = torch.utils.data.DataLoader(_GenDataset(iter(expected)), batch_size=None,
+                                     num_workers=4, prefetch_factor=16)
+    got = list(dl)
+    assert len(got) == len(expected), f"получено {len(got)} партий вместо {len(expected)}"
+    for a, b in zip(got, expected):
+        assert torch.equal(a, b), "данные из загрузчика не совпали с поданными"
+    assert dl.num_workers == 0, f"num_workers остался {dl.num_workers}"
+    print(f"[прокладка] DataLoader в один процесс: самопроверка пройдена "
+          f"({len(got)} партий поверх генератора, данные совпали)", flush=True)
+
+
+_selftest_dataloader()
+
+
+# --- ПРОКЛАДКА 6: длина окна обязана совпасть с формой скачанных негативов -------------------------
+#
+# Симптом (на самом обучении, после часа подготовки данных):
+#     ValueError: ... along dimension 1, the array at index 0 has size 16 and the array at index 1
+#     has size 22
+#
+# 16 — форма ПРЕДВЫЧИСЛЕННЫХ негативов ACAV100M: (5 625 000, **16**, 96). 22 — форма наших фич.
+# То есть скачанные негативы ЖЁСТКО ЗАДАЮТ размер окна детектора: 16 кадров = 32 000 отсчётов = 2 с.
+# Своё окно тут выбрать нельзя — иначе пришлось бы пересчитывать 2000 часов негативов самим.
+#
+# Откуда взялись 22: `train.py:747` вычисляет `total_length` как медиану длительности клипов + 750 мс.
+# У нашего корпуса медиана 1.60 с, отсюда 38 000 отсчётов и 22 кадра. Их «прилипание» к 32 000
+# срабатывает только при расхождении ≤ 4000, а у нас 6000.
+#
+# ⚠️ ЗАОДНО ЭТО ЛЕЧИТ ВТОРУЮ НЕСТЫКОВКУ АПСТРИМА, которая иначе живёт незаметно:
+# форма ВХОДА МОДЕЛИ считается как `get_embedding_shape(config["total_length"] // 16000)` —
+# деление ЦЕЛОЧИСЛЕННОЕ. При 38 000 это даёт 2 секунды (16 кадров), тогда как фичи считаются по
+# полным 38 000 (22 кадра). Модель и данные расходятся сами с собой при ЛЮБОЙ длине, не кратной
+# 16 000. Ровное окно 32 000 убирает расхождение по построению.
+#
+# ⚠️ Цена, ИЗМЕРЕННАЯ, а не предположенная: клипы длиннее окна апстрим обрезает С КОНЦА
+# (`data.py:676-677`, остаются первые 2 с). По нашему корпусу за 2 с вылезают 3030 клипов из 10 000,
+# но слово рискует потеряться лишь у **34 (0.3%)** — единственное обрамление, где имя стоит на 65%
+# длины. Во всех прочих длинных фразах имя укладывается в первые 27%, и отрезается только хвост.
+_REQUIRED_TOTAL_LENGTH = 32000   # 2.0 с при 16 кГц — ровно то, подо что посчитаны негативы ACAV100M
+
+_ORIG_AUGMENT_CLIPS = _oww_data.augment_clips
+
+
+def _augment_clips_fixed_window(clips, total_length=_REQUIRED_TOTAL_LENGTH, *a, **kw):
+    return _ORIG_AUGMENT_CLIPS(clips, _REQUIRED_TOTAL_LENGTH, *a, **kw)
+
+
+_oww_data.augment_clips = _augment_clips_fixed_window
+
+import openwakeword.utils as _oww_utils  # noqa: E402
+
+_ORIG_COMPUTE_FEATURES = _oww_utils.compute_features_from_generator
+
+
+def _compute_features_fixed_window(generator, n_total, clip_duration=_REQUIRED_TOTAL_LENGTH, *a, **kw):
+    return _ORIG_COMPUTE_FEATURES(generator, n_total, _REQUIRED_TOTAL_LENGTH, *a, **kw)
+
+
+_oww_utils.compute_features_from_generator = _compute_features_fixed_window
+
+
+def _selftest_window_matches_negatives() -> None:
+    """Сверяем НЕ намерение, а факт: сколько кадров у скачанных негативов и сколько даёт наше окно.
+    Числа берутся из настоящего файла и настоящего кода фич — совпадение доказывается, а не заявляется."""
+    neg_path = (r"F:\KLAS\voice\wakeword\data\features"
+                r"\openwakeword_features_ACAV100M_2000_hrs_16bit.npy")
+    if not os.path.exists(neg_path):
+        print("[прокладка] окно 32000: файл негативов не найден, сверка пропущена", flush=True)
+        return
+    neg_frames = np.load(neg_path, mmap_mode="r").shape[1]
+
+    from openwakeword.utils import AudioFeatures
+    ours = AudioFeatures(device="cpu").get_embedding_shape(_REQUIRED_TOTAL_LENGTH / 16000)[0]
+    assert ours == neg_frames, (
+        f"окно {_REQUIRED_TOTAL_LENGTH} даёт {ours} кадров, а у негативов их {neg_frames} — "
+        "обучение развалится на склейке партий"
+    )
+    print(f"[прокладка] окно {_REQUIRED_TOTAL_LENGTH} отсчётов ({_REQUIRED_TOTAL_LENGTH / 16000:.1f} с): "
+          f"самопроверка пройдена ({ours} кадров, ровно как у скачанных негативов)", flush=True)
+
+
+_selftest_window_matches_negatives()
+
+# --- Делегирование настоящему обучателю ------------------------------------------------------------
+#
+# ⚠️ Защита `__main__` здесь не ритуал, а необходимость на Windows. Дочерние процессы делаются
+# spawn'ом, и каждый ЗАНОВО импортирует этот файл. Без защиты повторный импорт перезапускал бы
+# обучение в каждом рабочем процессе — та самая ошибка про «bootstrapping phase».
+# Прокладки ВЫШЕ намеренно оставлены за пределами защиты: они должны применяться и в дочерних
+# процессах тоже, иначе те увидят непропатченные библиотеки.
+if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+    sys.argv[0] = "openwakeword.train"
+    runpy.run_module("openwakeword.train", run_name="__main__")
