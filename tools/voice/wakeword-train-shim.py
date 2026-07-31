@@ -284,6 +284,65 @@ def _selftest_trim_mmap() -> None:
 _oww_data.trim_mmap = _trim_mmap_windows_safe
 _selftest_trim_mmap()
 
+
+# --- ПРОКЛАДКА 4: ленивые модули speechbrain и жёстко зашитый «/» в пути -------------------------
+#
+# Симптом: создание оптимизатора Adam подтягивает `torch._dynamo`, тот обходит загруженные модули
+# через `inspect`, натыкается на ленивый модуль speechbrain и валит весь запуск:
+#     ImportError: Lazy import of LazyModule(target=speechbrain.integrations.k2_fsa) failed
+# (пакет `k2` у нас не установлен и не нужен — это интеграция с чужим декодером).
+#
+# ⭐ КОРЕНЬ — ВИНДОВЫЙ БАГ АПСТРИМА, и он обиден тем, что защита у них УЖЕ ЕСТЬ.
+# `speechbrain/utils/importutils.py:89-92` специально ловит обращения из `inspect` и отвечает
+# честным AttributeError:
+#     if importer_frame is not None and importer_frame.filename.endswith("/inspect.py"):
+#         raise AttributeError()
+# Разделитель пути зашит ПРЯМЫМ слэшем. На Windows путь выглядит как `C:\Python314\Lib\inspect.py`,
+# проверка не срабатывает НИКОГДА, и вместо «нет такого атрибута» летит ImportError.
+# Это тот же класс, что грабли 9.х канона: код, написанный в предположении одной платформы.
+#
+# Лечение минимальное и по смыслу: модуль, который не смог импортироваться, не должен утверждать,
+# что у него есть `__file__`. Превращаем ImportError в AttributeError ТОЛЬКО для дандер-атрибутов —
+# то есть ровно для интроспекции. Обычное обращение к настоящему содержимому по-прежнему падает
+# громко: если код правда полезет в `k2_fsa`, он обязан узнать, что пакета нет.
+from speechbrain.utils.importutils import LazyModule  # noqa: E402
+
+_ORIG_LAZY_GETATTR = LazyModule.__getattr__
+
+
+def _lazy_getattr_introspection_safe(self, attr):
+    try:
+        return _ORIG_LAZY_GETATTR(self, attr)
+    except ImportError:
+        if attr.startswith("__") and attr.endswith("__"):
+            raise AttributeError(attr) from None
+        raise
+
+
+LazyModule.__getattr__ = _lazy_getattr_introspection_safe
+
+
+def _selftest_lazy_module() -> None:
+    """Проверяем ОБЕ стороны (EXP-0020): интроспекция молчит, настоящее обращение падает громко."""
+    probe = LazyModule(name="__klas_probe__", target="__klas_nonexistent_module__", package=None)
+
+    # 1) Интроспекция: hasattr обязан вернуть False, а не взорваться.
+    assert hasattr(probe, "__file__") is False, "hasattr(__file__) не вернул False"
+    import inspect as _inspect
+    _inspect.getmodule(_selftest_lazy_module)          # проходит по sys.modules — не должно падать
+
+    # 2) Настоящее обращение обязано остаться громким отказом.
+    try:
+        probe.some_real_function
+        raise AssertionError("обращение к содержимому НЕ упало — прокладка глушит настоящие отказы")
+    except ImportError:
+        pass
+    print("[прокладка] ленивые модули speechbrain: самопроверка пройдена "
+          "(интроспекция молчит, обращение к содержимому падает громко)", flush=True)
+
+
+_selftest_lazy_module()
+
 # Делегируем настоящему обучателю. sys.argv уже содержит наши аргументы: runpy отдаст их модулю
 # как есть, а `run_name='__main__'` заставит его выполнить свой блок разбора аргументов.
 sys.argv[0] = "openwakeword.train"
