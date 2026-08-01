@@ -1,0 +1,16 @@
+{
+	"снято": "2026-08-01",
+	"долг": 10,
+	"ключи": [
+		"ideas/20_klas_admin_panel.md#94e1d5401a42",
+		"plans/18_light_voice_engine.md#c8d2d977bd79",
+		"researches/01_local_nomad_audit.md#641d2eca308c",
+		"researches/11_agent_vision.md#e1cb50a381be",
+		"researches/12_voice_latency_streaming.md#02289c5e0d66",
+		"researches/15_crosslingual_voice_cloning.md#02289c5e0d66",
+		"researches/19_code_revision_2026_07_31.md#25c0479a3329",
+		"researches/22_wake_word_training_data.md#02289c5e0d66",
+		"researches/23_barge_in_aec.md#e1cb50a381be",
+		"researches/24_always_on_assistant.md#e1cb50a381be"
+	]
+}
