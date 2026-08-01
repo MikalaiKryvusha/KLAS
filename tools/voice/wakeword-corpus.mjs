@@ -37,7 +37,7 @@
 // [NOT-TESTED] — родился 2026-07-31, замер цены на CPU идёт следующим шагом.
 
 import { createRequire } from 'node:module';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const require = createRequire(import.meta.url);
@@ -101,8 +101,43 @@ const FRAMINGS = [
 //     Без них корпус негативов состоит из непохожего, а детектор ошибается ровно на похожем.
 // (б) ОБЫЧНАЯ РЕЧЬ — фон, на котором детектор обязан молчать часами (метрика сферы — ложные
 //     срабатывания в час).
+// ⚠️ ЛОВУШКИ ЗАВИСЯТ ОТ СЛОВА, а не общие на все имена. Это было прибито к «Джарвису» и «Джой», и
+// при заведении третьего имени вскрылось числом: охранник корпуса напечатал «трудных негативов: 0».
+// То есть «Ариэль» училась бы отличать себя только от непохожего — а детектор ошибается ровно на
+// похожем. У каждого имени свои соседи по звучанию, и подобрать их может только человек, знающий
+// язык: у «Ариель» это «сериал» и «акварель» (общий хвост «-риел»/«-рель»), у «Джой» — «джойстик».
+const TRAPS = {
+  jarvis: [
+    'Джазовая музыка и джем на завтрак.',
+    'Сервис работает круглосуточно.',
+    'Технический сервис закрыт до понедельника.',
+    'Дарвин написал происхождение видов.',
+    'Джаз играл всю ночь.',
+  ],
+  joy: [
+    'Он купил новый джойстик для приставки.',
+    'Джойстик сломался, нужен другой.',
+    'Джинсы висят на стуле.',
+    'Джон приехал вчера вечером.',
+    'Джокер оказался в колоде лишним.',
+  ],
+  // «Ариель»: опасны слова с хвостом «-риел» и «-рель», а также созвучные имена.
+  ariel: [
+    'Вечером мы досмотрели этот сериал.',
+    'Новый сериал вышел на прошлой неделе.',
+    'Нужен прочный материал для полки.',
+    'Она рисует акварелью с детства.',
+    'Габриэль позвонил ближе к вечеру.',
+    'Ариадна дала Тесею клубок ниток.',
+    'Он слушал арии Верди весь вечер.',
+    'Карамель прилипла к обёртке.',
+    'Мы сняли отель у самого моря.',
+    'На арене выступали акробаты.',
+  ],
+};
+
 const NEGATIVES = [
-  // (а) ловушки
+  // (а) ловушки — общие, исторические (остаются ради сравнимости прежних корпусов)
   'Джазовая музыка и джем на завтрак.',
   'Он купил новый джойстик для приставки.',
   'Джойстик сломался, нужен другой.',
@@ -135,6 +170,15 @@ function arg(name, dflt) {
 const WORD = arg('word', 'Джарвис');
 const SLUG = arg('slug', 'jarvis');          // латиницей: имя каталога и будущей .onnx-модели
 const PLAN_ONLY = argv.includes('--plan');   // посчитать объём, не занимая процессор
+// Пересобрать ТОЛЬКО отрицательные, не трогая положительные. Нужно, когда к слову добавили
+// фонетические ловушки: позитивы уже синтезированы и проверены, и тратить на них полчаса заново
+// незачем. Манифест при этом СЛИВАЕТСЯ: старые записи о позитивах сохраняются, о негативах —
+// заменяются. Без слияния корпус потерял бы половину описания и стал папкой безымянных wav.
+const NEG_ONLY = argv.includes('--negatives-only');
+
+// Ловушки этого имени + общие. Дубли убираются: часть исторических ловушек уже лежит в NEGATIVES.
+const wordTraps = TRAPS[SLUG] ?? [];
+const NEG_TEXTS = [...new Set([...NEGATIVES, ...wordTraps])];
 
 // Сколько РАЗ синтезировать каждую комбинацию. Ручка существует потому, что эталонный конфиг
 // openWakeWord просит `n_samples: 10000` положительных на имя (`researches/22` §3), а полное
@@ -181,13 +225,14 @@ const outDir = path.join(CORPUS_ROOT, SLUG);
 const posDir = path.join(outDir, 'positive');
 const negDir = path.join(outDir, 'negative');
 
-const posCount = VOICES.length * SPEEDS.length * FRAMINGS.length * REPEATS;
-const negCount = VOICES.length * NEGATIVES.length * REPEATS;
+const posCount = NEG_ONLY ? 0 : VOICES.length * SPEEDS.length * FRAMINGS.length * REPEATS;
+const negCount = VOICES.length * NEG_TEXTS.length * REPEATS;
 
-console.log(`СЛОВО: «${WORD}»  (каталог: ${SLUG})`);
+console.log(`СЛОВО: «${WORD}»  (каталог: ${SLUG})${NEG_ONLY ? '  ·  ТОЛЬКО ОТРИЦАТЕЛЬНЫЕ' : ''}`);
 console.log(`Дикторы: ${VOICES.join(', ')}  ·  темпы: ${SPEEDS.join(', ')}  ·  повторов: ${REPEATS}`);
-console.log(`Положительных: ${VOICES.length} × ${SPEEDS.length} × ${FRAMINGS.length} × ${REPEATS} = ${posCount}`);
-console.log(`Отрицательных: ${VOICES.length} × ${NEGATIVES.length} × ${REPEATS} = ${negCount}`);
+if (!NEG_ONLY) console.log(`Положительных: ${VOICES.length} × ${SPEEDS.length} × ${FRAMINGS.length} × ${REPEATS} = ${posCount}`);
+console.log(`Отрицательных: ${VOICES.length} × ${NEG_TEXTS.length} × ${REPEATS} = ${negCount}`
+  + (wordTraps.length ? `  (из них ловушек «${SLUG}»: ${wordTraps.length} текстов)` : '  ⚠ ЛОВУШЕК ДЛЯ ЭТОГО ИМЕНИ НЕТ'));
 console.log(`Всего клипов: ${posCount + negCount}`);
 console.log(`Каталог: ${outDir}`);
 
@@ -198,8 +243,18 @@ if (PLAN_ONLY) {
 
 // Каталог пересобирается с нуля: остатки прошлого прогона с другим словом или другими темпами —
 // это молчаливое загрязнение корпуса, которое потом ищут в метриках обучения, а не на диске.
-rmSync(outDir, { recursive: true, force: true });
-mkdirSync(posDir, { recursive: true });
+// В режиме `--negatives-only` сносится ТОЛЬКО каталог отрицательных: положительные уже синтезированы
+// и проверены, и переделывать их ради добавленных ловушек незачем.
+if (NEG_ONLY) {
+  if (!existsSync(posDir)) {
+    console.error(`⛔ Нет ${posDir} — режим --negatives-only рассчитан на ДОПОЛНЕНИЕ готового корпуса.`);
+    process.exit(1);
+  }
+  rmSync(negDir, { recursive: true, force: true });
+} else {
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(posDir, { recursive: true });
+}
 mkdirSync(negDir, { recursive: true });
 
 const t0 = Date.now();
@@ -210,8 +265,8 @@ for (const voice of VOICES) {
   const tv = Date.now();
   const tts = makeTts(voice);
 
-  // положительные
-  for (let rep = 0; rep < REPEATS; rep++) {
+  // положительные (в режиме дополнения ловушками их не трогаем — они уже синтезированы и проверены)
+  if (!NEG_ONLY) for (let rep = 0; rep < REPEATS; rep++) {
     for (const speed of SPEEDS) {
       FRAMINGS.forEach((framing, fi) => {
         const text = framing.replace('{W}', WORD);
@@ -225,7 +280,7 @@ for (const voice of VOICES) {
 
   // отрицательные — на нормальном темпе: их задача дать фон и ловушки, а не покрыть края темпа
   for (let rep = 0; rep < REPEATS; rep++) {
-    NEGATIVES.forEach((text, ni) => {
+    NEG_TEXTS.forEach((text, ni) => {
       const name = `neg__${voice}__n${String(ni).padStart(2, '0')}__r${String(rep).padStart(2, '0')}.wav`;
       const sec = synthesize(tts, text, 1.0, path.join(negDir, name));
       totalSeconds += sec;
@@ -238,6 +293,22 @@ for (const voice of VOICES) {
 
 // Манифест — источник правды о том, ЧТО именно синтезировано: без него корпус это папка безымянных
 // wav, и следующая сессия не сможет ни воспроизвести его, ни объяснить метрику обучения.
+// В режиме дополнения ловушками СЛИВАЕМ: записи о положительных берём из прежнего манифеста, о
+// отрицательных — только что созданные. Иначе манифест описал бы половину корпуса, а половина wav
+// стала бы безымянной — тихая потеря, которая всплыла бы уже на раскладке обучения.
+if (NEG_ONLY) {
+  const prevPath = path.join(outDir, 'manifest.json');
+  if (!existsSync(prevPath)) {
+    console.error(`⛔ Нет ${prevPath} — нечего дополнять.`);
+    process.exit(1);
+  }
+  const prev = JSON.parse(readFileSync(prevPath, 'utf8'));
+  const keptPositives = prev.clips.filter((c) => c.file.startsWith('positive/'));
+  console.log(`  сохранено записей о положительных: ${keptPositives.length}`);
+  manifest.push(...keptPositives);
+  // Прежний отфильтрованный манифест больше не описывает корпус: негативы в нём старые.
+  rmSync(path.join(outDir, 'manifest.clean.json'), { force: true });
+}
 manifest.sort((a, b) => a.file.localeCompare(b.file));   // детерминированный порядок
 writeFileSync(
   path.join(outDir, 'manifest.json'),
@@ -246,15 +317,26 @@ writeFileSync(
 );
 
 const elapsed = (Date.now() - t0) / 1000;
-console.log(`\nСинтезировано ${manifest.length} клипов · ${totalSeconds.toFixed(1)} с звука · за ${elapsed.toFixed(1)} с`);
-console.log(`Скорость: ${(manifest.length / elapsed).toFixed(1)} клипов/с · RTF ${(elapsed / totalSeconds).toFixed(3)}`);
+// ⚠️ Считаем СИНТЕЗИРОВАННОЕ, а не размер манифеста: в режиме дополнения ловушками манифест несёт
+// ещё и прежние записи о положительных, которые сейчас никто не синтезировал. Смешать это — значит
+// печатать скорость и RTF по чужой работе (и именно на этом покраснел охранник ниже).
+const synthesized = NEG_ONLY ? negCount : manifest.length;
+console.log(`\nСинтезировано ${synthesized} клипов · ${totalSeconds.toFixed(1)} с звука · за ${elapsed.toFixed(1)} с`);
+console.log(`Скорость: ${(synthesized / elapsed).toFixed(1)} клипов/с · RTF ${(elapsed / totalSeconds).toFixed(3)}`);
 
 // --- ОХРАННИК ------------------------------------------------------------------------------------
 // Класс EXP-0042: пять охранников проекта физически не могли покраснеть, и один из них считал пустоту
 // успехом («0 строк = 0 проблем»). Здесь проверяется РОВНО то, чем корпус может тихо оказаться
 // негодным: клипов меньше обещанного, или какой-то клип пуст/подозрительно короток.
-const expected = posCount + negCount;
-const tooShort = manifest.filter((c) => c.seconds < 0.20);
+// В режиме дополнения ловушками ожидание считается по ВСЕМУ манифесту: свежие негативы плюс
+// сохранённые записи о положительных. Сравнивать полный манифест с одними негативами — ошибка
+// ожидания, а не корпуса; охранник на ней и покраснел, и это правильно: он поймал рассогласование.
+const keptPos = NEG_ONLY ? manifest.filter((c) => c.file.startsWith('positive/')).length : posCount;
+const expected = keptPos + negCount;
+// Длительность проверяем только у того, что синтезировали СЕЙЧАС: прежние положительные уже
+// проходили эту проверку в своём прогоне, а их поля `seconds` взяты из старого манифеста.
+const checked = NEG_ONLY ? manifest.filter((c) => c.file.startsWith('negative/')) : manifest;
+const tooShort = checked.filter((c) => c.seconds < 0.20);
 const problems = [];
 if (manifest.length !== expected) problems.push(`клипов ${manifest.length}, а ожидалось ${expected}`);
 if (tooShort.length) problems.push(`пустых или короче 0.20 с: ${tooShort.length} (${tooShort.slice(0, 3).map((c) => c.file).join(', ')}…)`);

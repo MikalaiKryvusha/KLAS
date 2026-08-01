@@ -113,8 +113,12 @@ function playWav(wav) {
     if (!play || turn?.aborted) return resolve();
     const p = spawnPlayer(wav);
     if (turn) { turn.player = p; turn.spoke = true; }
-    p.on('error', () => resolve());
-    p.on('close', () => { if (turn?.player === p) turn.player = null; resolve(); });
+    // Объявляем слушателю, что в комнате звучим МЫ (`bugs/26`). Снимаем объявление при ЛЮБОМ исходе
+    // — и когда фраза доиграла, и когда её убили перебиванием: иначе слушатель ждал бы тишины вечно.
+    tellSpeaking(true);
+    const done = () => { tellSpeaking(false); resolve(); };
+    p.on('error', done);
+    p.on('close', () => { if (turn?.player === p) turn.player = null; done(); });
   });
 }
 
@@ -134,6 +138,9 @@ function bargeIn(detector, score) {
   if (!turn || turn.aborted) return false;
   turn.aborted = true;
   try { turn.player?.kill(); } catch { /* уже завершился */ }
+  // Говорим слушателю «я замолчал» СРАЗУ, не дожидаясь события закрытия процесса: он всё равно
+  // ждёт ещё и реально тихого кадра, потому что звук гаснет позже убийства проигрывателя (`bugs/26`).
+  tellSpeaking(false);
   console.log(`\n✋ перебито на «${PERSONAS[detector]?.name ?? detector}» (${score}) — замолкаю`);
   return true;
 }
@@ -224,7 +231,7 @@ if (args.includes('--aec')) {
   if (mic) listenerArgs.push('--aec-mic', mic);
   if (spk) listenerArgs.push('--aec-spk', spk);
 }
-const listener = spawn(PY_WAKE, listenerArgs, { windowsHide: true });
+listener = spawn(PY_WAKE, listenerArgs, { windowsHide: true });   // объявлен выше — им пользуется tellSpeaking
 listener.on('error', (e) => { console.error(`Слушатель не запустился: ${e.message}`); process.exit(1); });
 listener.stderr.on('data', (d) => { const s = String(d).trim(); if (s) console.error(`[слушатель] ${s.slice(0, 300)}`); });
 
