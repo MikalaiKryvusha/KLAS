@@ -16,14 +16,40 @@ const MAX_PARAMS = Number(arg('--max-params', '35'));   // млрд параме
 const TOP = Number(arg('--top', '40'));                 // сколько строк лидерборда просмотреть
 const HF = 'https://huggingface.co/api';
 
+// ⚠️ Сеть падает, и падать она обязана ВНЯТНО. Голый `await fetch` при обрыве роняет процесс
+// стеком вызовов undici («TypeError: fetch failed … ConnectTimeoutError»), и слабая сессия по
+// такому падению не понимает, что виновата не она и не лидерборд, а связь. Поймано 2026-08-01:
+// разовый обрыв к huggingface, при том что сайт отвечал за 201 мс со второй попытки.
+// Одна попытка повтора здесь уместна: обрыв соединения — событие мгновенное и часто одноразовое.
+async function getJson(url, what) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      const why = e?.cause?.code || e?.message || String(e);
+      if (attempt === 2) {
+        console.error(`\n⛔ Не удалось получить ${what}: ${why}`);
+        console.error(`   Адрес: ${url}`);
+        console.error('   Это СЕТЬ, а не лидерборд: проверь связь (на этой машине уже мешали');
+        console.error('   NordVPN и Tailscale одновременно) и повтори — обрыв часто одноразовый.\n');
+        process.exit(1);
+      }
+      console.error(`  ⚠ ${what}: ${why} — повторяю`);
+    }
+  }
+  return null;
+}
+
 if (process.argv.includes('--list')) {
-  const ds = await (await fetch(`${HF}/datasets?filter=benchmark:official&limit=50`)).json();
+  const ds = await getJson(`${HF}/datasets?filter=benchmark:official&limit=50`, 'список бенчмарков');
   console.log('Официальные бенчмарки HF:\n' + ds.map((d) => '  ' + d.id).join('\n'));
   process.exit(0);
 }
 
 console.log(`\n═══ Лидерборд: ${BENCH} · модели ≤ ${MAX_PARAMS}B · топ-${TOP} ═══\n`);
-const board = await (await fetch(`${HF}/datasets/${BENCH}/leaderboard`)).json();
+const board = await getJson(`${HF}/datasets/${BENCH}/leaderboard`, `лидерборд ${BENCH}`);
 if (!Array.isArray(board)) { console.error('Неожиданный ответ API:', JSON.stringify(board).slice(0, 200)); process.exit(1); }
 
 const fit = [];
