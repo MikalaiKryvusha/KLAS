@@ -33,6 +33,7 @@ import collections
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -52,6 +53,11 @@ AEC_EXE = r"F:\KLAS\tools\voice\aec-capture\aec-capture.exe"
 SR = 16000
 FRAME = 1280                    # 80 мс — родной шаг openWakeWord
 MIC_DEFAULT = "Микрофон (NVIDIA Broadcast)"   # тот же дефолт, что у voice-talk.mjs и wakeword-live.py
+# ⚠️ Микрофон по имени — хрупкая привязка. Владелец выключил NVIDIA Broadcast при разборе `bugs/25`,
+# и устройство с этим именем ИСЧЕЗЛО из системы: слушатель стал падать на пустом потоке, а причина
+# выглядела как «микрофон молчит». Поэтому имя — это ПРЕДПОЧТЕНИЕ, а не константа: берём первое
+# существующее из списка, и только если ни одного нет — сообщаем внятно, перечислив, что доступно.
+MIC_PREFERRED = ["Микрофон (NVIDIA Broadcast)", "Микрофон (BY-V20)"]
 
 # ⭐ ПОРОГ РЕЧИ ВЫСТАВЛЕН ПО ЗАМЕРУ, А НЕ НА ГЛАЗ (2026-08-01, боевой микрофон владельца):
 #   тишина комнаты через шумодав NVIDIA Broadcast — средний модуль отсчёта 0.1 (99 кадров подряд);
@@ -189,6 +195,49 @@ def frames_from_proc(cmd, errbuf):
             pass
 
 
+def dshow_audio_devices():
+    """Какие звуковые устройства dshow реально есть в системе (спрашиваем ffmpeg, а не помним)."""
+    p = subprocess.run(["ffmpeg", "-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
+                       capture_output=True)
+    txt = p.stderr.decode("utf-8", "replace")
+    # ⚠️ Формат вывода ffmpeg МЕНЯЛСЯ, и разбирать надо оба. Свежие сборки печатают тип суффиксом:
+    #   [in#0 @ …] "Микрофон (BY-V20)" (audio)
+    # старые — заголовками секций «DirectShow audio devices», а под ними просто имена в кавычках.
+    # Разбор только по заголовкам давал ПУСТОЙ список на новой сборке, то есть «микрофонов нет» —
+    # ошибка, неотличимая от отсутствия устройств (поймано на себе 2026-08-01).
+    names, in_audio = [], False
+    for line in txt.splitlines():
+        m = re.match(r'^.*?"(.+)"\s*\((audio|video)\)\s*$', line)
+        if m:
+            if m.group(2) == "audio":
+                names.append(m.group(1))
+            continue
+        if "DirectShow audio devices" in line:
+            in_audio = True
+            continue
+        if "DirectShow video devices" in line:
+            in_audio = False
+            continue
+        if in_audio and '"' in line and "Alternative name" not in line:
+            names.append(line.split('"')[1])
+    return names
+
+
+def pick_mic(explicit):
+    """Имя микрофона: явное — как есть; иначе первое СУЩЕСТВУЮЩЕЕ из предпочтений.
+
+    Привязка к одному имени уже подвела: выключенный NVIDIA Broadcast унёс устройство, и слушатель
+    молчал без объяснения (`bugs/25`, разбор 2026-08-01).
+    """
+    if explicit:
+        return explicit
+    have = dshow_audio_devices()
+    for name in MIC_PREFERRED:
+        if name in have:
+            return name
+    return have[0] if have else MIC_PREFERRED[0]
+
+
 def frames_from_ffmpeg(device, errbuf):
     """Микрофон как есть. Слышит и собственный голос ассистента из колонок — перебить нельзя."""
     return frames_from_proc(
@@ -243,7 +292,8 @@ def write_wav(path, frames):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--device", default=MIC_DEFAULT)
+    ap.add_argument("--device", default=None,
+                    help="имя dshow-микрофона; без него берётся первый существующий из предпочтений")
     # ── Источник с подавлением собственного эха (`bugs/25`, `plans/20` шаг 3) ──
     # ⚠️ Микрофон для AEC берётся СЫРОЙ, до нейросетевого шумодава. Подавитель подстраивает модель
     # ЛИНЕЙНОГО пути «колонки → микрофон»; поставь перед ним нелинейную обработку (шумодав NVIDIA
@@ -309,7 +359,8 @@ def main() -> int:
         source = frames_from_aec(a.aec_mic, a.aec_spk, errbuf)
         src_name, src_dev = "aec", f"waveIn {a.aec_mic} / waveOut {a.aec_spk}"
     else:
-        source, src_name, src_dev = frames_from_ffmpeg(a.device, errbuf), "mic", a.device
+        dev = pick_mic(a.device)
+        source, src_name, src_dev = frames_from_ffmpeg(dev, errbuf), "mic", dev
     out_line({"stage": "ready", "detectors": list(model.models.keys()),
               "source": src_name, "device": src_dev})
 
