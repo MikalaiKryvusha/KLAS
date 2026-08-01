@@ -11,6 +11,7 @@
     "health": "powershell -File tools/health-check.ps1",
     "guard:dry-run": "node tools/dry-run-guard.mjs",
     "guard:anonymize": "node tools/anonymize.mjs --selftest",
+    "guard:encoding": "node tools/encoding-guard.mjs",
     "owner:questions": "node tools/owner-questions.mjs",
     "kaif:version": "node .kaif/kaif-core.mjs version",
     "kaif:check": "node .kaif/kaif-core.mjs check",

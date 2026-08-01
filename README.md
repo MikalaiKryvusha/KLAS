@@ -390,6 +390,22 @@ voice\venv-wakeword\Scripts\python.exe tools\voice\wakeword-live.py --seconds 90
 node tools/voice-wake.mjs                             # разговор по имени, без клавиш
 ```
 
+7. Активатор можно обучить на своём голосе. Детекторы обучены на синтезированном корпусе, а зовёт
+   ассистента живой человек, и эти два голоса совпадают не всегда. Стенд записи проводит через
+   процедуру сам: подсказывает, как произнести имя в очередной раз (обычно, вполголоса, быстро,
+   отвернувшись, издалека, с вопросительной интонацией), проверяет каждую запись распознаванием
+   сразу и засчитывает только принятые. Пятьдесят записей занимают около четырёх минут. Тишина по
+   краям вырезается автоматически, запись ведётся в 48 кГц, а оригиналы хранятся отдельно от
+   учебных клипов — благодаря этому обработку можно переделать, не приглашая человека заново.
+   Процедура работает с любым именем и для любого человека.
+
+```powershell
+$py = "voice\venv-wakeword\Scripts\python.exe"
+& $py tools\voice\wakeword-enroll.py --slug jarvis      # записать 50 произнесений
+& $py tools\voice\wakeword-enroll.py --slug jarvis --audit      # найти выбросы
+& $py tools\voice\wakeword-enroll.py --slug jarvis --audition --play   # послушать всё
+```
+
 ### 9.3. Что в работе
 
 1. Разговор по имени собран и проверен автоматически, но живого разбора владельцем ещё не проходил.
@@ -829,6 +845,23 @@ voice\venv-wakeword\Scripts\python.exe tools\voice\wakeword-live.py --seconds 90
 
 ```powershell
 node tools/voice-wake.mjs                             # a conversation by name, no keys
+```
+
+7. The activator can be trained on your own voice. The detectors are trained on a synthesized
+   corpus, while a living person is the one who calls the assistant, and those two voices do not
+   always match. The recording stand walks you through the procedure itself: it prompts how to say
+   the name each time (normally, half-voice, faster, turned away, from across the room, with a
+   questioning intonation), checks every take by recognition on the spot and counts only the
+   accepted ones. Fifty takes take about four minutes. Silence at the edges is trimmed
+   automatically, recording is done at 48 kHz, and the originals are kept apart from the training
+   clips — thanks to that the processing can be redone without inviting the person back. The
+   procedure works with any name and for any person.
+
+```powershell
+$py = "voice\venv-wakeword\Scripts\python.exe"
+& $py tools\voice\wakeword-enroll.py --slug jarvis      # record 50 utterances
+& $py tools\voice\wakeword-enroll.py --slug jarvis --audit      # find outliers
+& $py tools\voice\wakeword-enroll.py --slug jarvis --audition --play   # listen to all of them
 ```
 
 ### 9.3. What is underway
