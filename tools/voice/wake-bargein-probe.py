@@ -203,6 +203,9 @@ def main() -> int:
                     help="на сколько дБ имя громче речи ассистента в микрофоне")
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--keep", action="store_true", help="оставить смешанные wav для прослушивания")
+    ap.add_argument("--noise-snr", default="",
+                    help="проверить устойчивость к ШИРОКОПОЛОСНОМУ шуму (модель «микрофон без "
+                         "шумодава»), напр. 30,24,18,12 — насколько активатор держится без NVIDIA Broadcast")
     ap.add_argument("--selfcheck", action="store_true",
                     help="доказать повторяемость стенда (тихо: без звука и без микрофона)")
     ap.add_argument("--live-echo", action="store_true",
@@ -217,6 +220,7 @@ def main() -> int:
     ap.add_argument("--device", default=MIC_DEFAULT)
     a = ap.parse_args()
     snrs = [float(s) for s in a.snr.split(",") if s.strip()]
+    noise_snrs = [float(s) for s in a.noise_snr.split(",") if s.strip()]
 
     os.makedirs(OUT_DIR, exist_ok=True)
     paths = [os.path.join(TRAINED, f"{s}.onnx") for s in WORD]
@@ -260,6 +264,20 @@ def main() -> int:
         # «слушать всегда» даёт ложные самоперебивания.
         only = np.concatenate([lead, np.resize(assistant, len(name) + len(tail))])
         rows.append((slug, "ТОЛЬКО речь ассистента (контроль)", peak_score(model, only, slug)))
+
+        # ⭐ Вопрос владельца 2026-08-01: «может мне выключить NVIDIA Broadcast? там шумоподавление
+        # включено, ты меряешь не совсем комнату». Замечание верное, и вот его цена: активаторы
+        # учились на синтезе, окружённом ПОЧТИ ЦИФРОВОЙ ТИШИНОЙ, а шумодав даёт им ровно такой пол
+        # (0.0). Значит выключение шумодава — не нейтральное действие: оно поднимает пол шума и
+        # может само по себе ослепить детектор. Меряем ШИРОКОПОЛОСНЫМ шумом (не речью!) — это и
+        # есть модель «микрофон без подавления».
+        if noise_snrs:
+            rng = np.random.default_rng(20260801)     # фиксированное зерно: замер обязан повторяться
+            hiss = rng.standard_normal(len(clean)).astype(np.float32)
+            for snr in noise_snrs:
+                gain = rms(name) / rms(hiss) / (10 ** (snr / 20.0))
+                rows.append((slug, f"имя поверх ШУМА (без шумодава), SNR {snr:+.0f} дБ",
+                             peak_score(model, np.clip(clean + hiss * gain, -1, 1).astype(np.float32), slug)))
 
     w = max(len(r[1]) for r in rows)
     cur = None
