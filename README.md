@@ -190,9 +190,14 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # обезличить �
 1. Анонимизация заменяет имена, ссылки и адреса автора нейтральными, обезличивает конфигурацию,
    отвязывает копию от исходного репозитория и в конце выполняет самопроверку на утечки.
 2. Анонимизация выполняется только на свежем клоне, не на рабочем репозитории.
-3. Замена и самопроверка охватывают файлы известных текстовых типов. Файлы `LICENSE`, `.gitignore`,
-   `logo/klas-cat.svg` и `README.pdf` в охват не входят и сохраняют имя автора; при необходимости
-   они правятся вручную.
+3. Самопроверка обходит всё дерево копии, а не только те файлы, которые умеет править замена, и
+   завершается с ошибкой, если имя автора где-то осталось. Файл `README.pdf` удаляется как зеркало
+   `README.md`; вернуть его — `node tools/render-pdf.mjs`.
+4. Единственное осознанное исключение — `LICENSE`: уведомление об авторском праве остаётся на
+   месте, этого требуют условия MIT. Скрипт называет этот файл вслух, а не пропускает молча.
+5. Проверить саму анонимизацию можно, ничем не рискуя: `node tools/anonymize.mjs --selftest`
+   выполняет её на одноразовом клоне и отдельно убеждается, что сломанная версия завершается
+   ошибкой.
 
 ---
 
@@ -403,9 +408,8 @@ node tools/voice-wake.mjs                             # разговор по и
    автозапуск.
 2. Мастер устанавливает модели Qwythos-9B и/или Gemma-4-12B. Основная модель `qwen3.6-35b-a3b`
    устанавливается только полным развёртыванием (раздел 3.4).
-3. Выбор «установить анонимно» в мастере обезличивает копию и проверяет результат, но охват замены
-   ограничен известными текстовыми типами файлов: `LICENSE`, `.gitignore`, `logo/klas-cat.svg` и
-   `README.pdf` сохраняют имя автора (раздел 3.5).
+3. Выбор «установить анонимно» в мастере обезличивает копию и проверяет результат; имя автора
+   остаётся только в файле `LICENSE` — этого требуют условия MIT (раздел 3.5).
 4. Разговор по имени работает, но живого разбора владельцем ещё не проходил. Пока ассистент
    говорит, он продолжает слушать, а подавления собственного звука в микрофоне нет — поэтому он
    может принять свою же речь из колонок за обращение. Голоса персон к живому диалогу не подключены:
@@ -623,9 +627,13 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # de-identify the copy a
    de-identifies the configuration, detaches the copy from the original repository and finally
    runs a self-check for leaks.
 2. The anonymization is performed only on a fresh clone, not on the working repository.
-3. The replacement and the self-check cover files of known text types. The `LICENSE`, `.gitignore`,
-   `logo/klas-cat.svg` and `README.pdf` files are outside that scope and keep the author's name;
-   they are edited by hand when needed.
+3. The self-check walks the whole tree of the copy, not only the files the replacement is able to
+   edit, and it fails if the author's name is left anywhere. The `README.pdf` file is deleted as a
+   mirror of `README.md`; to bring it back run `node tools/render-pdf.mjs`.
+4. The single deliberate exception is `LICENSE`: the copyright notice stays in place, as the MIT
+   terms require. The script names that file out loud instead of skipping it silently.
+5. The anonymization itself can be verified at no risk: `node tools/anonymize.mjs --selftest` runs
+   it on a disposable clone and separately makes sure that a broken version exits with an error.
 
 ---
 
@@ -842,9 +850,8 @@ node tools/voice-wake.mjs                             # a conversation by name, 
    directory breaks the shortcuts and the autostart.
 2. The wizard installs the Qwythos-9B and/or Gemma-4-12B models. The main model
    `qwen3.6-35b-a3b` is installed only by the full deployment (section 3.4).
-3. The "install anonymously" choice in the wizard de-identifies the copy and verifies the result,
-   but the scope of the replacement is limited to known text file types: `LICENSE`, `.gitignore`,
-   `logo/klas-cat.svg` and `README.pdf` keep the author's name (section 3.5).
+3. The "install anonymously" choice in the wizard de-identifies the copy and verifies the result;
+   the author's name is left only in the `LICENSE` file, as the MIT terms require (section 3.5).
 4. The conversation by name works but has not yet passed the owner's live scrutiny. While the
    assistant speaks it keeps listening, and there is no suppression of its own sound in the
    microphone — so it can take its own speech from the speakers for an address. The persona voices

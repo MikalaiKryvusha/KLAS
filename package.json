@@ -10,6 +10,7 @@
     "deploy:apply": "node tools/deploy.mjs --apply",
     "health": "powershell -File tools/health-check.ps1",
     "guard:dry-run": "node tools/dry-run-guard.mjs",
+    "guard:anonymize": "node tools/anonymize.mjs --selftest",
     "kaif:version": "node .kaif/kaif-core.mjs version",
     "kaif:check": "node .kaif/kaif-core.mjs check",
     "kaif:update": "node .kaif/kaif-core.mjs update"
