@@ -46,6 +46,9 @@ for _s in (sys.stdout, sys.stderr):
 
 TRAINED = r"F:\KLAS\voice\wakeword\training"
 OUT_DIR = r"F:\KLAS\voice\out"
+# Помощник захвата с подавлением собственного эха (`bugs/25`, `plans/20`). Собирается из исходника
+# рядом с ним (build.ps1) и в git не хранится.
+AEC_EXE = r"F:\KLAS\tools\voice\aec-capture\aec-capture.exe"
 SR = 16000
 FRAME = 1280                    # 80 мс — родной шаг openWakeWord
 MIC_DEFAULT = "Микрофон (NVIDIA Broadcast)"   # тот же дефолт, что у voice-talk.mjs и wakeword-live.py
@@ -161,13 +164,13 @@ def selftest() -> int:
     return 0 if ok == len(cases) else 1
 
 
-def frames_from_ffmpeg(device, errbuf):
-    """Непрерывный поток с микрофона кадрами по 80 мс."""
-    p = subprocess.Popen(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "dshow",
-         "-i", f"audio={device}", "-ac", "1", "-ar", str(SR), "-f", "s16le", "-"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    )
+def frames_from_proc(cmd, errbuf):
+    """Непрерывный поток кадрами по 80 мс из дочернего процесса, пишущего 16 кГц моно s16le в stdout.
+
+    Общий читатель для ДВУХ источников — ffmpeg и помощника с подавлением эха: у них один и тот же
+    контракт вывода, поэтому смена источника не должна расползаться по коду (bugs/25, plans/20).
+    """
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     # stderr читаем ОТДЕЛЬНЫМ потоком: занятый или переименованный микрофон иначе даёт молчание,
     # неотличимое от тишины в комнате, и причина отказа остаётся невидимой (тот же класс, что в
     # voice-talk.mjs — там обвязку ffmpeg уже чинили ревизией 2026-07-31).
@@ -184,6 +187,23 @@ def frames_from_ffmpeg(device, errbuf):
             p.terminate()
         except Exception:      # noqa: BLE001
             pass
+
+
+def frames_from_ffmpeg(device, errbuf):
+    """Микрофон как есть. Слышит и собственный голос ассистента из колонок — перебить нельзя."""
+    return frames_from_proc(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "dshow",
+         "-i", f"audio={device}", "-ac", "1", "-ar", str(SR), "-f", "s16le", "-"], errbuf)
+
+
+def frames_from_aec(mic, spk, errbuf):
+    """Микрофон, из которого ВЫЧТЕНА собственная речь ассистента (`bugs/25`, `plans/20` шаг 3).
+
+    Источник — встроенный в Windows Voice Capture DSP в режиме source (наш помощник
+    `tools/voice/aec-capture`). Контракт вывода тот же, что у ffmpeg, поэтому весь остальной код
+    слушателя не знает, откуда пришли кадры, — и это главное свойство врезки.
+    """
+    return frames_from_proc([AEC_EXE, "--mic", str(mic), "--spk", str(spk)], errbuf)
 
 
 def frames_from_wav(path, realtime=False):
@@ -224,6 +244,17 @@ def write_wav(path, frames):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default=MIC_DEFAULT)
+    # ── Источник с подавлением собственного эха (`bugs/25`, `plans/20` шаг 3) ──
+    # ⚠️ Микрофон для AEC берётся СЫРОЙ, до нейросетевого шумодава. Подавитель подстраивает модель
+    # ЛИНЕЙНОГО пути «колонки → микрофон»; поставь перед ним нелинейную обработку (шумодав NVIDIA
+    # Broadcast, «студийный голос») — и связь опорного сигнала с записанным перестанет быть
+    # линейной, а фильтр не сойдётся. Отсюда индексы waveIn, а не имя виртуального устройства.
+    # Активатору шумодав всё равно не нужен: замером показано, что шум ему безразличен
+    # (`researches/23` §0, 0.92–0.98 даже при +12 дБ).
+    ap.add_argument("--aec", action="store_true",
+                    help="брать звук через встроенный AEC Windows вместо ffmpeg (перебивание)")
+    ap.add_argument("--aec-mic", type=int, default=0, help="индекс waveIn СЫРОГО микрофона")
+    ap.add_argument("--aec-spk", type=int, default=0, help="индекс waveOut колонок, куда играет ассистент")
     ap.add_argument("--wav", default=None, help="прогон из файла вместо микрофона")
     ap.add_argument("--realtime", action="store_true",
                     help="выдавать кадры файла в темпе живой речи (нужно для проверок, зависящих от времени)")
@@ -268,9 +299,19 @@ def main() -> int:
     threading.Thread(target=read_stdin, daemon=True).start()
 
     errbuf = []
-    source = frames_from_wav(a.wav, a.realtime) if a.wav else frames_from_ffmpeg(a.device, errbuf)
+    if a.wav:
+        source, src_name, src_dev = frames_from_wav(a.wav, a.realtime), "wav", None
+    elif a.aec:
+        if not os.path.exists(AEC_EXE):
+            out_line({"stage": "error", "reason": "no-aec-exe", "path": AEC_EXE,
+                      "hint": "powershell -File tools\\voice\\aec-capture\\build.ps1"})
+            return 2
+        source = frames_from_aec(a.aec_mic, a.aec_spk, errbuf)
+        src_name, src_dev = "aec", f"waveIn {a.aec_mic} / waveOut {a.aec_spk}"
+    else:
+        source, src_name, src_dev = frames_from_ffmpeg(a.device, errbuf), "mic", a.device
     out_line({"stage": "ready", "detectors": list(model.models.keys()),
-              "source": "wav" if a.wav else "mic", "device": None if a.wav else a.device})
+              "source": src_name, "device": src_dev})
 
     listening = True
     capture = None
@@ -355,7 +396,7 @@ def main() -> int:
         out_line({"stage": "eof", "frames": seen})
         return 0
     out_line({"stage": "error", "reason": "mic-stream-ended", "frames": seen,
-              "ffmpeg": ("".join(errbuf))[:400]})
+              "stderr": ("".join(errbuf))[:400]})
     return 1
 
 

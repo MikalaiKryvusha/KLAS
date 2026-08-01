@@ -45,6 +45,8 @@
 // выдуманный GUID собирается и линкуется молча, а падает уже в бою.
 #include <uuids.h>
 #include <wmcodecdsp.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
 #include <mmsystem.h>
 #include <mmreg.h>
 #include <stdio.h>
@@ -85,22 +87,59 @@ private:
     LONG m_ref; BYTE* m_data; DWORD m_len, m_max;
 };
 
-// Перечисление устройств теми же индексами, которых ждёт DSP: он адресует waveIn/waveOut, а не
-// endpoint-ID. Имена печатаются в UTF-8 — кириллица в названиях устройств здесь обычное дело.
+// ⚠️ ИНДЕКСЫ — ЭТО ПОРЯДОК В КОЛЛЕКЦИИ IMMDevice, А НЕ В waveIn/waveOut. Так прямо сказано в
+// документации MFPKEY_WMAAECMA_DEVICE_INDEXES, и это не придирка: подстановка waveIn-индекса даёт
+// E_INVALIDARG на AllocateStreamingResources, а «почти совпавший» индекс молча заставляет DSP
+// вычитать НЕ ТОТ звук — подавление получается нулевым, и это выглядит как «AEC не работает».
+// Печатаем ещё и оба умолчания Windows (обычное и «для связи»): они бывают РАЗНЫЕ, и если DSP
+// смотрит на одно, а проигрывание идёт в другое, вычитать нечего.
+static void print_endpoints(IMMDeviceEnumerator* en, EDataFlow flow, const char* title, const char* opt) {
+    IMMDeviceCollection* col = NULL;
+    if (FAILED(en->EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE, &col))) return;
+    UINT n = 0; col->GetCount(&n);
+
+    LPWSTR defConsole = NULL, defComm = NULL;
+    IMMDevice* d = NULL;
+    if (SUCCEEDED(en->GetDefaultAudioEndpoint(flow, eConsole, &d))) { d->GetId(&defConsole); d->Release(); }
+    if (SUCCEEDED(en->GetDefaultAudioEndpoint(flow, eCommunications, &d))) { d->GetId(&defComm); d->Release(); }
+
+    fprintf(stderr, "%s (индекс для %s):\n", title, opt);
+    for (UINT i = 0; i < n; i++) {
+        IMMDevice* dev = NULL;
+        if (FAILED(col->Item(i, &dev))) continue;
+        LPWSTR id = NULL; dev->GetId(&id);
+        IPropertyStore* props = NULL;
+        wchar_t name[256]; name[0] = 0;
+        if (SUCCEEDED(dev->OpenPropertyStore(STGM_READ, &props))) {
+            PROPVARIANT pv; PropVariantInit(&pv);
+            if (SUCCEEDED(props->GetValue(PKEY_Device_FriendlyName, &pv)) && pv.vt == VT_LPWSTR)
+                wcsncpy_s(name, pv.pwszVal, _TRUNCATE);
+            PropVariantClear(&pv); props->Release();
+        }
+        char u8[512]; WideCharToMultiByte(CP_UTF8, 0, name, -1, u8, sizeof(u8), NULL, NULL);
+        const char* mark = "";
+        if (defConsole && id && !wcscmp(defConsole, id)) mark = defComm && !wcscmp(defComm, id) ? "  ← по умолчанию (и для связи)" : "  ← по умолчанию";
+        else if (defComm && id && !wcscmp(defComm, id)) mark = "  ← по умолчанию ДЛЯ СВЯЗИ";
+        fprintf(stderr, "  %2u  %s%s\n", i, u8, mark);
+        if (id) CoTaskMemFree(id);
+        dev->Release();
+    }
+    if (defConsole) CoTaskMemFree(defConsole);
+    if (defComm) CoTaskMemFree(defComm);
+    col->Release();
+}
+
 static void list_devices() {
-    UINT nin = waveInGetNumDevs(), nout = waveOutGetNumDevs();
-    fprintf(stderr, "Микрофоны (waveIn), индекс для --mic:\n");
-    for (UINT i = 0; i < nin; i++) {
-        WAVEINCAPSW c; if (waveInGetDevCapsW(i, &c, sizeof(c)) != MMSYSERR_NOERROR) continue;
-        char u8[512]; WideCharToMultiByte(CP_UTF8, 0, c.szPname, -1, u8, sizeof(u8), NULL, NULL);
-        fprintf(stderr, "  %2u  %s\n", i, u8);
+    IMMDeviceEnumerator* en = NULL;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+                                __uuidof(IMMDeviceEnumerator), (void**)&en))) {
+        fprintf(stderr, "не удалось создать IMMDeviceEnumerator\n");
+        return;
     }
-    fprintf(stderr, "Колонки (waveOut), индекс для --spk:\n");
-    for (UINT i = 0; i < nout; i++) {
-        WAVEOUTCAPSW c; if (waveOutGetDevCapsW(i, &c, sizeof(c)) != MMSYSERR_NOERROR) continue;
-        char u8[512]; WideCharToMultiByte(CP_UTF8, 0, c.szPname, -1, u8, sizeof(u8), NULL, NULL);
-        fprintf(stderr, "  %2u  %s\n", i, u8);
-    }
+    print_endpoints(en, eCapture, "Микрофоны", "--mic");
+    print_endpoints(en, eRender, "Колонки", "--spk");
+    fprintf(stderr, "\n-1 = устройство по умолчанию.\n");
+    en->Release();
 }
 
 static HRESULT set_bool(IPropertyStore* ps, const PROPERTYKEY& key, bool v) {
@@ -113,7 +152,9 @@ static HRESULT set_i4(IPropertyStore* ps, const PROPERTYKEY& key, LONG v) {
 }
 
 int main(int argc, char** argv) {
-    int mic = -1, spk = -1; double seconds = 0.0; bool aec = true, list = false;
+    // -2 = «не задано». Само значение -1 ЗАКОННО и означает «устройство по умолчанию» — так
+    // задокументировано у MFPKEY_WMAAECMA_DEVICE_INDEXES, поэтому его нельзя путать с «не задано».
+    int mic = -2, spk = -2; double seconds = 0.0; bool aec = true, list = false; int echo_ms = 0;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--list") list = true;
@@ -121,14 +162,18 @@ int main(int argc, char** argv) {
         else if (a == "--mic" && i + 1 < argc) mic = atoi(argv[++i]);
         else if (a == "--spk" && i + 1 < argc) spk = atoi(argv[++i]);
         else if (a == "--seconds" && i + 1 < argc) seconds = atof(argv[++i]);
+        else if (a == "--echo-length" && i + 1 < argc) echo_ms = atoi(argv[++i]);
     }
 
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     CHECK(hr, "CoInitializeEx");
 
     if (list) { list_devices(); CoUninitialize(); return 0; }
-    if (mic < 0 || spk < 0) {
-        fprintf(stderr, "нужны --mic <индекс> и --spk <индекс>; список: aec-capture.exe --list\n");
+    if (mic < -1 || spk < -1) {
+        fprintf(stderr, "нужны --mic <индекс|-1> и --spk <индекс|-1>; -1 = устройство по умолчанию\n");
+        fprintf(stderr, "⚠️ индексы — это порядок в КОЛЛЕКЦИИ IMMDevice (WASAPI), а НЕ в waveIn/waveOut:\n");
+        fprintf(stderr, "   так сказано в документации MFPKEY_WMAAECMA_DEVICE_INDEXES. Списки разные,\n");
+        fprintf(stderr, "   и подстановка waveIn-индекса даёт E_INVALIDARG на AllocateStreamingResources.\n");
         CoUninitialize(); return 1;
     }
 
@@ -155,6 +200,14 @@ int main(int argc, char** argv) {
     // Тонкая настройка разрешена — и дальше мы гасим ВСЮ нелинейщину (см. шапку файла).
     hr = set_bool(ps, MFPKEY_WMAAECMA_FEATURE_MODE, true);
     CHECK(hr, "FEATURE_MODE");
+    // Длина «хвоста» эха: фильтр моделирует путь колонки→микрофон на столько миллисекунд. Умолчание
+    // рассчитано на колонки рядом с микрофоном; звук через ТЕЛЕВИЗОР по HDMI приходит с куда большей
+    // задержкой, и если она не помещается в хвост, вычитать нечего — подавление выходит нулевым.
+    if (echo_ms > 0) {
+        if (FAILED(set_i4(ps, MFPKEY_WMAAECMA_FEATR_ECHO_LENGTH, echo_ms)))
+            fprintf(stderr, "[aec] предупреждение: ECHO_LENGTH=%d не принят\n", echo_ms);
+        else fprintf(stderr, "[aec] длина хвоста эха: %d мс\n", echo_ms);
+    }
     if (FAILED(set_i4(ps, MFPKEY_WMAAECMA_FEATR_NS, 0)))            fprintf(stderr, "[aec] предупреждение: NS не выключился\n");
     if (FAILED(set_bool(ps, MFPKEY_WMAAECMA_FEATR_AGC, false)))     fprintf(stderr, "[aec] предупреждение: AGC не выключился\n");
     if (FAILED(set_bool(ps, MFPKEY_WMAAECMA_FEATR_CENTER_CLIP, false))) fprintf(stderr, "[aec] предупреждение: центральный клиппер не выключился\n");

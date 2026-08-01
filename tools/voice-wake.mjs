@@ -206,6 +206,15 @@ if (wavArg) listenerArgs.push('--wav', wavArg);
 if (args.includes('--realtime')) listenerArgs.push('--realtime');
 if (device) listenerArgs.push('--device', device);
 if (threshold) listenerArgs.push('--threshold', threshold);
+// Перебивание посреди речи (bugs/25): звук идёт через встроенный AEC Windows, а не напрямую с
+// микрофона. Микрофон при этом берётся СЫРОЙ (до шумодава) — подавитель моделирует ЛИНЕЙНЫЙ путь
+// «колонки → микрофон», и нелинейная обработка перед ним не даёт фильтру сойтись.
+if (args.includes('--aec')) {
+  listenerArgs.push('--aec');
+  const mic = flag('--aec-mic'); const spk = flag('--aec-spk');
+  if (mic) listenerArgs.push('--aec-mic', mic);
+  if (spk) listenerArgs.push('--aec-spk', spk);
+}
 const listener = spawn(PY_WAKE, listenerArgs, { windowsHide: true });
 listener.on('error', (e) => { console.error(`Слушатель не запустился: ${e.message}`); process.exit(1); });
 listener.stderr.on('data', (d) => { const s = String(d).trim(); if (s) console.error(`[слушатель] ${s.slice(0, 300)}`); });

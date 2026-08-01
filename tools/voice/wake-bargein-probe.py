@@ -116,6 +116,106 @@ def peak_score(model, x, slug):
     return peak
 
 
+AEC_EXE = r"F:\KLAS\tools\voice\aec-capture\aec-capture.exe"
+ECHO_LEN_ARGS = []      # заполняется из --echo-length: длина хвоста эха, мс
+
+
+def capture_while_playing(cmd, wav, seconds, out_path):
+    """Записать поток дочернего процесса, пока в колонках играет реплика ассистента.
+
+    Один код на оба захвата — с подавлением и контрольный без него: сравнивать «с AEC» надо с ТЕМ ЖЕ
+    трактом, иначе меряешь разницу двух программ, а не работу подавителя.
+    """
+    # ⛔ ПОРЯДОК НЕ ПРОИЗВОЛЕН. Сначала ИГРАЕМ, потом захватываем: встроенный DSP в режиме source
+    # отказывается стартовать, если на колонках нет активного потока, и возвращает
+    # `WMAAECMA_E_NO_ACTIVE_RENDER_STREAM` (0x87CC000A — имя найдено в wmcodecdsp.h, не угадано).
+    # Обратный порядок «сначала микрофон, через секунду речь» давал именно эту ошибку.
+    play = subprocess.Popen(
+        ["powershell", "-NoProfile", "-Command", f"(New-Object Media.SoundPlayer '{wav}').PlaySync()"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(0.3)                                   # даём потоку на колонках реально открыться
+    cap = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    need = int(seconds * SR) * 2
+    buf = bytearray()
+    while len(buf) < need:
+        chunk = cap.stdout.read(min(FRAME * 2, need - len(buf)))
+        if not chunk:
+            break
+        buf += chunk
+    play.wait()
+    cap.terminate()
+    err = cap.stderr.read().decode("utf-8", "replace")
+    x = np.frombuffer(bytes(buf), dtype=np.int16).astype(np.float32) / 32767.0
+    if len(x):
+        sf.write(out_path, x, SR, subtype="PCM_16")
+    return x, err
+
+
+def aec_compare(model, mic, spk):
+    """ЗАМЕР ПОДАВЛЕНИЯ: один и тот же тракт с AEC и без, пока играет реплика ассистента.
+
+    Критерий приёмки задан числом заранее (`plans/20`): подавление ≥15 дБ, потому что в комнате
+    SNR 0…+3 дБ, а детектору нужно +18 дБ.
+    """
+    wav = os.path.join(OUT_DIR, "bargein-assistant.wav")
+    play_len = len(to_16k_mono(wav)) / SR
+    dur = play_len + 1.5
+    res = {}
+    for label, extra in (("БЕЗ AEC (контроль)", ["--no-aec"]), ("С AEC", [])):
+        cmd = [AEC_EXE, "--mic", str(mic), "--spk", str(spk)] + extra + ECHO_LEN_ARGS
+        out = os.path.join(OUT_DIR, f"aec-{'off' if extra else 'on'}.wav")
+        x, err = capture_while_playing(cmd, wav, dur, out)
+        if not len(x):
+            print(f"  ✖ {label}: захват пуст. stderr: {err.strip()[:300]}")
+            return
+        pcm = np.abs(x * 32767.0)
+        # Захват стартует ЧЕРЕЗ 0.3 с после начала речи (иначе DSP не запустится, см. выше),
+        # поэтому эхо — это начало записи, а тишина для пола — её хвост, уже после конца реплики.
+        body = pcm[: int(max(play_len - 0.5, 0.5) * SR)]
+        floor = float(pcm[int((play_len + 0.2) * SR):].mean()) if len(pcm) > int((play_len + 0.4) * SR) else 0.0
+        res[label] = (floor, float(body.mean()), float(body.max()), x)
+        print(f"  {label:18} пол после речи {floor:6.1f} · эхо средний {body.mean():7.1f} · пик {body.max():6.0f}")
+
+    off, on = res["БЕЗ AEC (контроль)"], res["С AEC"]
+    supp_mean = 20.0 * np.log10(max(off[1], 1e-6) / max(on[1], 1e-6))
+    supp_peak = 20.0 * np.log10(max(off[2], 1e-6) / max(on[2], 1e-6))
+    print(f"\n  ⇒ подавление эха: {supp_mean:+.1f} дБ по среднему · {supp_peak:+.1f} дБ по пику")
+    print(f"  критерий приёмки (plans/20): ≥15 дБ  →  {'ДОСТИГНУТ' if supp_mean >= 15 else 'НЕ достигнут'}")
+    for slug in model.models:
+        print(f"  детектор {WORD[slug]} на остатке эха: пик {peak_score(model, on[3], slug):.3f} "
+              f"(должен молчать, порог 0.5)")
+
+
+def aec_converge(mic, spk, seconds):
+    """СХОДИТСЯ ЛИ ФИЛЬТР. Адаптивный подавитель эха настраивается на акустику комнаты не мгновенно;
+    короткий замер судит холодный старт и потому занижает результат. Здесь стимул длинный — реплика
+    по кругу, — и уровень эха печатается по окнам: падает от окна к окну ⇒ фильтр сходится, и в бою
+    (слушатель работает непрерывно) подавление будет тем, что видно в ХВОСТЕ, а не в начале.
+    """
+    src = to_16k_mono(os.path.join(OUT_DIR, "bargein-assistant.wav"))
+    stim = np.resize(src, int(seconds * SR)).astype(np.float32)
+    wav = os.path.join(OUT_DIR, "bargein-stimulus.wav")
+    sf.write(wav, stim, SR, subtype="PCM_16")
+
+    cmd = [AEC_EXE, "--mic", str(mic), "--spk", str(spk)]
+    x, err = capture_while_playing(cmd, wav, seconds - 0.5, os.path.join(OUT_DIR, "aec-converge.wav"))
+    if not len(x):
+        print(f"  ✖ захват пуст. stderr: {err.strip()[:300]}")
+        return
+    pcm = np.abs(x * 32767.0)
+    win = 5 * SR
+    print(f"  окна по 5 с (эхо в микрофоне после подавления):")
+    levels = []
+    for i in range(len(pcm) // win):
+        m = float(pcm[i * win:(i + 1) * win].mean())
+        levels.append(m)
+        print(f"    {i*5:3d}–{(i+1)*5:3d} с : средний {m:7.1f}")
+    if len(levels) >= 2:
+        drop = 20.0 * np.log10(max(levels[0], 1e-6) / max(levels[-1], 1e-6))
+        print(f"\n  ⇒ от первого окна к последнему: {drop:+.1f} дБ "
+              f"({'фильтр сходится' if drop > 3 else 'сходимости не видно'})")
+
+
 def selfcheck(model):
     """СТЕНД ОБЯЗАН ДОКАЗАТЬ, ЧТО ЕМУ МОЖНО ВЕРИТЬ — до того, как его числа попадут в документ.
 
@@ -218,9 +318,20 @@ def main() -> int:
     ap.add_argument("--room-is-quiet", action="store_true",
                     help="владелец предупреждён и подтвердил тишину — без этого живой замер не пойдёт")
     ap.add_argument("--device", default=MIC_DEFAULT)
+    ap.add_argument("--echo-length", type=int, default=0,
+                    help="длина хвоста эха для DSP, мс (звук через телевизор по HDMI приходит поздно)")
+    ap.add_argument("--aec-converge", type=float, default=0.0,
+                    help="сходится ли фильтр: N секунд непрерывного стимула, уровень эха по окнам. "
+                         "⚠️ ТРЕБУЕТ --room-is-quiet")
+    ap.add_argument("--aec-compare", action="store_true",
+                    help="замерить ПОДАВЛЕНИЕ эха: тот же тракт с AEC и без. ⚠️ ТРЕБУЕТ --room-is-quiet")
+    ap.add_argument("--aec-mic", type=int, default=0, help="индекс waveIn СЫРОГО микрофона (до шумодава)")
+    ap.add_argument("--aec-spk", type=int, default=0, help="индекс waveOut колонок ассистента")
     a = ap.parse_args()
     snrs = [float(s) for s in a.snr.split(",") if s.strip()]
     noise_snrs = [float(s) for s in a.noise_snr.split(",") if s.strip()]
+    if a.echo_length > 0:
+        ECHO_LEN_ARGS[:] = ["--echo-length", str(a.echo_length)]
 
     os.makedirs(OUT_DIR, exist_ok=True)
     paths = [os.path.join(TRAINED, f"{s}.onnx") for s in WORD]
@@ -289,6 +400,21 @@ def main() -> int:
         control = cond.startswith("ТОЛЬКО")
         mark = ("OK " if (score < a.threshold) else "!!!") if control else ("OK " if score >= a.threshold else "!!!")
         print(f"  {mark} {cond.ljust(w)}  пик {score:.3f}  → {fired}")
+
+    if a.aec_converge > 0:
+        if not a.room_is_quiet:
+            print("\n⛔ НЕ ЗАПУЩЕНО: это длинный прогон со звуком. Предупреди владельца и повтори с --room-is-quiet.")
+            return 1
+        print(f"\n=== СХОДИМОСТЬ ФИЛЬТРА ({a.aec_converge:.0f} с непрерывного стимула) ===")
+        aec_converge(a.aec_mic, a.aec_spk, a.aec_converge)
+
+    if a.aec_compare:
+        if not a.room_is_quiet:
+            print("\n⛔ ЗАМЕР ПОДАВЛЕНИЯ НЕ ЗАПУЩЕН: два прогона со звуком в колонки и записью микрофона.")
+            print("   Предупреди владельца, дождись подтверждения тишины и повтори с --room-is-quiet.")
+            return 1
+        print("\n=== ЗАМЕР ПОДАВЛЕНИЯ ЭХА (тот же тракт с AEC и без) ===")
+        aec_compare(model, a.aec_mic, a.aec_spk)
 
     if a.live_echo:
         if not a.room_is_quiet:
