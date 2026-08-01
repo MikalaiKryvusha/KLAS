@@ -17,74 +17,25 @@
 //   node tools/owner-questions.mjs             ← показать очередь владельца
 //   node tools/owner-questions.mjs --selftest  ← доказать, что охранник умеет краснеть
 //
+// ⚠️ СЕМАНТИКА СТАТУСА ЖИВЁТ НЕ ЗДЕСЬ, а в `tools/lib/review-core.mjs`, и импортируется сюда.
+// Причина — грабли №1 регламента `/owner-reviews`: две реализации одного правила расходятся МОЛЧА,
+// при зелёных самотестах у обеих. Разойдись «ждёт владельца» у охранника и у страницы вычитки —
+// владелец увидел бы «очередь пуста» рядом с документом «🟡 ждёт ответов». Правило одно, дом у него
+// один. Фикстуры этого файла (ниже) остаются здесь: они стерегут ИМЕННО живые случаи KLAS.
+//
 // [TESTED: 2026-08-01 · самопроверка 6/6; на живом дереве нашёл перенос ответов, потерянный в чате]
+// [TESTED: 2026-08-01 · после переноса семантики в ядро контура — самопроверка та же, 6/6]
 
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseDoc, parseInterview, OWNER_DIRS } from './lib/review-core.mjs';
+
+export { parseDoc };
+
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DIRS = ['interviews', 'homeworks'];
-
-// Строка статуса — единственный АВТОРИТЕТНЫЙ признак. Пустые «Ответ:» вторичны: владелец имеет
-// право ответить словами в чате, и тогда агент обязан перенести ответ в файл (см. охранник ниже).
-// ⚠️ Статус ищется ГДЕ УГОДНО в строке, а не только с её начала. Первая версия требовала начала
-// строки и объявила `homeworks/01` выпавшей из конвенции — хотя статус там есть, просто внутри
-// абзаца («…настроена агентом и проверена боем. Статус: 🟢 готово к подключению»). Документ был
-// исправен, придирался парсер. Чинить надо прибор, а не документы владельца: угадывать их
-// состояние агент не вправе.
-const STATUS_RE = /\*{0,2}Статус:?\*{0,2}[ \t]*(.+)$/m;
-const ANSWERED = /✅|ОТВЕЧЕНО|ОТВЕТЫ ПОЛУЧЕНЫ|ПРОЙДЕНА|ЗАКРЫТО/i;
-const WAITING = /❓|🟡|🟢|ЖДЁТ|ЖДУТ|ОЖИДАЕТ/i;
-// ⚠️ ОТВЕТ ЗАПИСЫВАЕТСЯ ТРЕМЯ СПОСОБАМИ, и охранник обязан знать все.
-// Первая версия знала один и дважды покраснела на ИСПРАВНЫХ документах: `interview_006` отвечен
-// ТАБЛИЦЕЙ решений внизу, `homeworks/04` — разделом с ВЕРДИКТОМ владельца. Охранник, кричащий на
-// правильном, быстро научает себя игнорировать, поэтому оба случая стали фикстурами самопроверки.
-const ANSWER_LINE_RE = /^\*{0,2}Ответ[^:\n]{0,40}:\*{0,2}(.*)$/;
-const DECISION_ROW_RE = /^\|(?!\s*-{2,})[^|\n]+\|[^|\n]*\|/gm;
-const VERDICT_RE = /^#{1,4}\s*.*(Вердикт|Ответ владельца|Решени)/mi;
-
-/** Заполнена ли строка ответа. ⚠️ Считаем ПОСТРОЧНО, а не одной регуляркой: жадная версия пятилась
- *  и принимала вторую звёздочку в «**Ответ:**» за текст ответа, из-за чего пустое выглядело
- *  заполненным. Разметка (звёздочки, подчерки, кавычки) текстом не считается. */
-function countAnswers(text) {
-  let filled = 0;
-  let empty = 0;
-  for (const line of text.split(/\r?\n/)) {
-    const m = line.match(ANSWER_LINE_RE);
-    if (!m) continue;
-    if (m[1].replace(/[*_`~\s]/g, '')) filled++; else empty++;
-  }
-  return { filled, empty };
-}
-
-/** Разбор ОДНОГО документа. Чистая функция — её же гоняет самопроверка на строках-фикстурах. */
-export function parseDoc(name, text) {
-  const m = text.match(STATUS_RE);
-  const status = m ? m[1].trim().replace(/\s+/g, ' ').slice(0, 90) : null;
-  const answered = status ? ANSWERED.test(status) : false;
-  const waiting = status ? WAITING.test(status) && !answered : !status;
-  const { filled, empty: emptyAnswers } = countAnswers(text);
-  // Свидетельство ответа — любое из трёх: заполненная строка «Ответ:», таблица решений, раздел с
-  // вердиктом владельца. Ноль свидетельств при статусе «отвечено» и есть настоящее расхождение.
-  const decisionsPart = text.split(/^#{1,4}\s*.*(?:Решени|Вердикт)/m)[1] || '';
-  const decisionRows = (decisionsPart.match(DECISION_ROW_RE) || []).length;
-  const hasVerdict = VERDICT_RE.test(text) && decisionsPart.replace(/\s/g, '').length > 40;
-  const evidence = filled + decisionRows + (hasVerdict ? 1 : 0);
-  return {
-    name,
-    status,
-    answered,
-    waiting,
-    emptyAnswers,
-    evidence,
-    // Расхождение: сказано «отвечено», а свидетельств ответа в документе НЕТ ВООБЩЕ — ни
-    // заполненных строк, ни таблицы решений. Значит ответ прозвучал в чате и потерян для будущего.
-    drift: answered && evidence === 0,
-    // Нет строки статуса вовсе — документ не встроен в конвенцию, и его никто не заметит.
-    noStatus: !status,
-  };
-}
+const DIRS = OWNER_DIRS;
 
 function selftest() {
   const cases = [
@@ -131,12 +82,16 @@ for (const dir of DIRS) {
   try { files = readdirSync(full); } catch { continue; }
   for (const f of files.sort()) {
     if (!f.endsWith('.md') || f === 'README.md') continue;
-    docs.push({ dir, ...parseDoc(`${dir}/${f}`, readFileSync(path.join(full, f), 'utf8')) });
+    const name = `${dir}/${f}`;
+    const text = readFileSync(path.join(full, f), 'utf8');
+    // Разбор по вопросам нужен ТОЛЬКО ради залежавшегося статуса — «ждёт», а отвечены все.
+    docs.push({ dir, ...parseDoc(name, text), staleWaiting: parseInterview(name, text.replace(/\r\n?/g, '\n')).staleWaiting });
   }
 }
 
 const waiting = docs.filter((d) => d.waiting);
 const drifted = docs.filter((d) => d.drift);
+const stale = docs.filter((d) => d.staleWaiting);
 
 console.log('\n═══ ОЧЕРЕДЬ ВЛАДЕЛЬЦА ═══\n');
 if (!waiting.length) console.log('  Пусто — агент ничего не ждёт от владельца.');
@@ -145,15 +100,31 @@ for (const d of waiting) {
   if (d.status) console.log(`     ${d.status}`);
   if (d.emptyAnswers) console.log(`     вопросов без ответа: ${d.emptyAnswers}`);
   if (d.noStatus) console.log('     ⚠️ нет строки «Статус:» — документ выпадает из конвенции');
+  if (d.staleWaiting) console.log('     ⛔ ЗАЛЕЖАЛСЯ: отвечены ВСЕ вопросы, а статус зовёт владельца');
 }
 
 console.log(`\nВсего документов: ${docs.length} · ждут владельца: ${waiting.length} · закрыто: ${docs.filter((d) => d.answered).length}`);
 
+// ⛔ ДВА РАСХОЖДЕНИЯ, И ОБА — ДОЛГ АГЕНТА. Симметричная пара: в одну сторону статус обгоняет
+// документ, в другую — отстаёт от него. Обе одинаково вредны: сессия с пустым контекстом либо не
+// найдёт ответ владельца, либо будет ждать давно данный.
+let debt = 0;
 if (drifted.length) {
-  console.error('\n⛔ ДОЛГ АГЕНТА, А НЕ ВЛАДЕЛЬЦА: статус говорит «отвечено», а места для ответов пусты.');
+  debt++;
+  console.error('\n⛔ ДОЛГ АГЕНТА: статус говорит «отвечено», а места для ответов пусты.');
   console.error('   Значит ответ прозвучал в чате и не перенесён в документ — следующая сессия его НЕ НАЙДЁТ.');
   for (const d of drifted) console.error(`   · ${d.name} — пустых «Ответ:»: ${d.emptyAnswers}`);
-  console.error('   Перенеси ответы владельца в файлы дословно и повтори.\n');
+  console.error('   Перенеси ответы владельца в файлы дословно и повтори.');
+}
+if (stale.length) {
+  debt++;
+  console.error('\n⛔ ДОЛГ АГЕНТА: статус зовёт владельца, а отвечены ВСЕ вопросы документа.');
+  console.error('   Владелец уже ответил, а шапка осталась прежней — каждая новая сессия ждёт его впустую.');
+  for (const d of stale) console.error(`   · ${d.name} — ${d.status}`);
+  console.error('   Обнови строку «Статус:» (текст владельца не трогай) и повтори.');
+}
+if (debt) {
+  console.error('');
   process.exit(1);
 }
 console.log('');

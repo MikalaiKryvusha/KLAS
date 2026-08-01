@@ -97,6 +97,11 @@ KAIF_ADAPTATION_TASK.md
 *.pem
 id_rsa*
 
+# Снимки страниц и кадры контура вычитки (tools/review.mjs render · verify-owner-reviews.mjs):
+# производное от md, пересобирается одной командой. Решения владельца лежат НЕ здесь, а в
+# interviews/decisions/ — они в git и есть, потому что это его слово.
+/test-results/
+
 # Мусор ОС/редакторов
 Thumbs.db
 Desktop.ini
