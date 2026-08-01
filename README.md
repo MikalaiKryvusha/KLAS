@@ -373,10 +373,18 @@ node tools/voice-bench.mjs --quick                    # бенч голосов�
 voice\venv-wakeword\Scripts\python.exe tools\voice\wakeword-live.py --seconds 90
 ```
 
+6. Имя открывает разговор. Достаточно сказать «Джарвис» или «Джой» — короткий сигнал подтверждает,
+   что имя услышано, дальше говорите вопрос: конец фразы система определяет по паузе, клавиши не
+   нужны. Имя выбирает и собеседника: у каждой персоны свой голос, свой характер и своя отдельная
+   беседа. Пока ассистент отвечает, он продолжает слушать — назовите имя, и он замолчит и выслушает.
+
+```powershell
+node tools/voice-wake.mjs                             # разговор по имени, без клавиш
+```
+
 ### 9.3. Что в работе
 
-1. Имя пока не открывает разговор. Детекторы работают, но диалог по-прежнему начинается нажатием
-   Enter; связка «услышал имя → началась беседа, и имя выбрало персону» ещё не сделана.
+1. Разговор по имени собран и проверен автоматически, но живого разбора владельцем ещё не проходил.
 2. Голоса персон Jarvis и Joi выбраны владельцем, но к живому диалогу не подключены: рядом с
    загруженной основной моделью свободно ~950 МБ видеопамяти, а движкам клонов требуется
    3 150 МБ. В живом диалоге говорит Silero.
@@ -394,9 +402,10 @@ voice\venv-wakeword\Scripts\python.exe tools\voice\wakeword-live.py --seconds 90
    устанавливается только полным развёртыванием (раздел 3.4).
 3. Выбор «установить анонимно» в мастере обезличивание не выполняет; анонимная копия делается
    командами раздела 3.5.
-4. Имя пока не открывает разговор: детекторы «Джарвис» и «Джой» обучены и работают отдельной
-   командой, но диалог по-прежнему начинается нажатием клавиши. Голоса персон к живому диалогу
-   не подключены.
+4. Разговор по имени работает, но живого разбора владельцем ещё не проходил. Пока ассистент
+   говорит, он продолжает слушать, а подавления собственного звука в микрофоне нет — поэтому он
+   может принять свою же речь из колонок за обращение. Голоса персон к живому диалогу не подключены:
+   обе персоны говорят голосами Silero.
 5. Английские слова в речи произносятся транслитерацией кириллицей; честное двуязычное
    произношение появится с мультиязычным движком синтеза.
 6. Первый ход новой голосовой сессии занимает до ~50 секунд; последующие ходы — ~8 секунд.
@@ -797,11 +806,20 @@ node tools/voice-bench.mjs --quick                    # the voice pipeline bench
 voice\venv-wakeword\Scripts\python.exe tools\voice\wakeword-live.py --seconds 90
 ```
 
+6. The name opens a conversation. Say "Jarvis" or "Joy" — a short signal confirms the name was
+   heard, then speak the question: the system finds the end of the phrase by the pause, no keys
+   needed. The name also chooses the interlocutor: each persona has its own voice, its own character
+   and its own separate conversation. While the assistant answers it keeps listening — say the name
+   and it falls silent and hears you out.
+
+```powershell
+node tools/voice-wake.mjs                             # a conversation by name, no keys
+```
+
 ### 9.3. What is underway
 
-1. The name does not open a conversation yet. The detectors work, but a dialog still begins with a
-   press of Enter; the link "the name was heard → the conversation began, and the name chose the
-   persona" is not made yet.
+1. The conversation by name is assembled and verified automatically, but has not yet passed the
+   owner's live scrutiny.
 2. The persona voices of Jarvis and Joi are chosen by the owner but not connected to the live
    dialog: with the main model loaded, ~950 MB of VRAM remain free, while the cloning engines
    require 3 150 MB. Silero speaks in the live dialog.
@@ -819,9 +837,10 @@ voice\venv-wakeword\Scripts\python.exe tools\voice\wakeword-live.py --seconds 90
    `qwen3.6-35b-a3b` is installed only by the full deployment (section 3.4).
 3. The "install anonymously" choice in the wizard performs no de-identification; an anonymous copy
    is made by the commands of section 3.5.
-4. The name does not open a conversation yet: the "Jarvis" and "Joy" detectors are trained and work
-   as a separate command, but a dialog still begins with a key press. The persona voices are not
-   connected to the live dialog.
+4. The conversation by name works but has not yet passed the owner's live scrutiny. While the
+   assistant speaks it keeps listening, and there is no suppression of its own sound in the
+   microphone — so it can take its own speech from the speakers for an address. The persona voices
+   are not connected to the live dialog: both personas speak with Silero voices.
 5. English words in speech are pronounced transliterated into Cyrillic; honest bilingual
    pronunciation will arrive with a multilingual synthesis engine.
 6. The first turn of a new voice session takes up to ~50 seconds; the following turns — ~8
