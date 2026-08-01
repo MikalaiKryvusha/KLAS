@@ -119,7 +119,7 @@ def build_set(slug, other_slug, word):
 def main() -> int:
     plan = [
         ("jarvis", "joy", "Джарвис", ["jarvis", "jarvis_v3_short", "jarvis_v2_cross", "jarvis_v1_baseline"]),
-        ("joy", "jarvis", "Джой", ["joy"]),
+        ("joy", "jarvis", "Джой", ["joy", "joy_v1_control"]),
     ]
     for slug, other, word, models in plan:
         pos_p, neg_p, cross_p = build_set(slug, other, word)
