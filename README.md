@@ -190,6 +190,9 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # обезличить �
 1. Анонимизация заменяет имена, ссылки и адреса автора нейтральными, обезличивает конфигурацию,
    отвязывает копию от исходного репозитория и в конце выполняет самопроверку на утечки.
 2. Анонимизация выполняется только на свежем клоне, не на рабочем репозитории.
+3. Замена и самопроверка охватывают файлы известных текстовых типов. Файлы `LICENSE`, `.gitignore`,
+   `logo/klas-cat.svg` и `README.pdf` в охват не входят и сохраняют имя автора; при необходимости
+   они правятся вручную.
 
 ---
 
@@ -400,8 +403,9 @@ node tools/voice-wake.mjs                             # разговор по и
    автозапуск.
 2. Мастер устанавливает модели Qwythos-9B и/или Gemma-4-12B. Основная модель `qwen3.6-35b-a3b`
    устанавливается только полным развёртыванием (раздел 3.4).
-3. Выбор «установить анонимно» в мастере обезличивание не выполняет; анонимная копия делается
-   командами раздела 3.5.
+3. Выбор «установить анонимно» в мастере обезличивает копию и проверяет результат, но охват замены
+   ограничен известными текстовыми типами файлов: `LICENSE`, `.gitignore`, `logo/klas-cat.svg` и
+   `README.pdf` сохраняют имя автора (раздел 3.5).
 4. Разговор по имени работает, но живого разбора владельцем ещё не проходил. Пока ассистент
    говорит, он продолжает слушать, а подавления собственного звука в микрофоне нет — поэтому он
    может принять свою же речь из колонок за обращение. Голоса персон к живому диалогу не подключены:
@@ -619,6 +623,9 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # de-identify the copy a
    de-identifies the configuration, detaches the copy from the original repository and finally
    runs a self-check for leaks.
 2. The anonymization is performed only on a fresh clone, not on the working repository.
+3. The replacement and the self-check cover files of known text types. The `LICENSE`, `.gitignore`,
+   `logo/klas-cat.svg` and `README.pdf` files are outside that scope and keep the author's name;
+   they are edited by hand when needed.
 
 ---
 
@@ -835,8 +842,9 @@ node tools/voice-wake.mjs                             # a conversation by name, 
    directory breaks the shortcuts and the autostart.
 2. The wizard installs the Qwythos-9B and/or Gemma-4-12B models. The main model
    `qwen3.6-35b-a3b` is installed only by the full deployment (section 3.4).
-3. The "install anonymously" choice in the wizard performs no de-identification; an anonymous copy
-   is made by the commands of section 3.5.
+3. The "install anonymously" choice in the wizard de-identifies the copy and verifies the result,
+   but the scope of the replacement is limited to known text file types: `LICENSE`, `.gitignore`,
+   `logo/klas-cat.svg` and `README.pdf` keep the author's name (section 3.5).
 4. The conversation by name works but has not yet passed the owner's live scrutiny. While the
    assistant speaks it keeps listening, and there is no suppression of its own sound in the
    microphone — so it can take its own speech from the speakers for an address. The persona voices

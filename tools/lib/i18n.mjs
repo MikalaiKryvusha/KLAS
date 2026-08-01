@@ -50,6 +50,11 @@ const DICT = {
     no_internet: 'Нет интернета — а он нужен для скачивания. Проверьте соединение и запустите снова.',
     installing: 'Устанавливаю компоненты (это надолго — качаются гигабайты, можно отойти)…',
     anonymizing: 'Обезличиваю установку…',
+    // Провал обезличивания обязан быть громким: молчание здесь = копия с чужим именем внутри (bugs/23).
+    anonymize_failed:
+      'Обезличивание НЕ удалось: в файлах остались личные идентификаторы (см. вывод выше).\n' +
+      '   Установка остановлена до экрана успеха. Устраните причину и запустите установщик снова —\n' +
+      '   он продолжит с этого места.',
     making_shortcuts: 'Создаю ярлыки на Рабочем столе…',
     offer_autostart: 'Запускать KLAS автоматически при входе в Windows?',
     running_health: 'Проверяю, что стек поднялся…',
@@ -113,6 +118,10 @@ const DICT = {
     no_internet: 'No internet — it is required for downloads. Check your connection and run again.',
     installing: 'Installing components (this takes a while — gigabytes are downloading, feel free to step away)…',
     anonymizing: 'Anonymizing the install…',
+    anonymize_failed:
+      'Anonymization FAILED: personal identifiers are still present in the files (see output above).\n' +
+      '   The install stopped before the success screen. Fix the cause and run the installer again —\n' +
+      '   it will continue from here.',
     making_shortcuts: 'Creating desktop shortcuts…',
     offer_autostart: 'Start KLAS automatically when Windows starts?',
     running_health: 'Checking that the stack is up…',

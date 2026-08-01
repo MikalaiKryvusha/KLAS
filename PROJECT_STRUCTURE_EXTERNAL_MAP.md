@@ -41,6 +41,7 @@
 ├── tools/                               # инструменты проекта и скрипты харнесса
 │   ├── voice-say.mjs voice-hear.mjs voice-talk.mjs voice-bench.mjs voice-roundtrip.mjs
 │   │                                    #   голосовой тракт: рот · уши · диалог · бенч · round-trip
+│   ├── dry-run-guard.mjs                #   охранник класса: dry-run-инструмент вызван без --apply (bugs/23)
 │   └── voice/                           # внутренности тракта (общий код + питон-сайдкары)
 │       ├── pipeline.mjs                 #   ОДИН конвейер хода для диалога И бенча (не копия!)
 │       ├── tts-daemon.mjs               #   Node-обёртка резидентного рта + канарейка кодировки
