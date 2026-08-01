@@ -191,8 +191,9 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # обезличить �
    отвязывает копию от исходного репозитория и в конце выполняет самопроверку на утечки.
 2. Анонимизация выполняется только на свежем клоне, не на рабочем репозитории.
 3. Самопроверка обходит всё дерево копии, а не только те файлы, которые умеет править замена, и
-   завершается с ошибкой, если имя автора где-то осталось. Файл `README.pdf` удаляется как зеркало
-   `README.md`; вернуть его — `node tools/render-pdf.mjs`.
+   завершается с ошибкой, если имя автора где-то осталось. Файл `README.pdf` — зеркало `README.md`:
+   старое снимается и собирается заново из обезличенного текста. Не хватило зависимостей или
+   браузера — копия остаётся без него, и скрипт говорит это вслух.
 4. Единственное осознанное исключение — `LICENSE`: уведомление об авторском праве остаётся на
    месте, этого требуют условия MIT. Скрипт называет этот файл вслух, а не пропускает молча.
 5. Проверить саму анонимизацию можно, ничем не рискуя: `node tools/anonymize.mjs --selftest`
@@ -644,8 +645,9 @@ node F:\KLAS\tools\anonymize.mjs --apply --reinit-git   # de-identify the copy a
    runs a self-check for leaks.
 2. The anonymization is performed only on a fresh clone, not on the working repository.
 3. The self-check walks the whole tree of the copy, not only the files the replacement is able to
-   edit, and it fails if the author's name is left anywhere. The `README.pdf` file is deleted as a
-   mirror of `README.md`; to bring it back run `node tools/render-pdf.mjs`.
+   edit, and it fails if the author's name is left anywhere. The `README.pdf` file is a mirror of
+   `README.md`: the old one is removed and rebuilt from the de-identified text. If dependencies or
+   a browser are missing, the copy is left without it and the script says so out loud.
 4. The single deliberate exception is `LICENSE`: the copyright notice stays in place, as the MIT
    terms require. The script names that file out loud instead of skipping it silently.
 5. The anonymization itself can be verified at no risk: `node tools/anonymize.mjs --selftest` runs

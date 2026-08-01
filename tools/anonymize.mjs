@@ -168,7 +168,16 @@ function selftest() {
     // (2) Файлы, из-за которых родился bugs/24 — каждый проверяется ПОИМЁННО.
     say((leaksIn(join(ok, '.gitignore')) || []).length === 0, '.gitignore обезличен (файл без расширения)');
     say((leaksIn(join(ok, 'logo', 'klas-cat.svg')) || []).length === 0, 'logo/klas-cat.svg обезличен (.svg)');
-    say(!existsSync(join(ok, 'README.pdf')), 'README.pdf удалён (двоичное зеркало README.md)');
+    // README.pdf — решение владельца (interview_011, Q2=A): ПЕРЕСОБИРАТЬ, а не удалять. Проверяется
+    // ИНВАРИАНТ, а не один исход: старое зеркало не выживает НИКОГДА, а новое либо собралось и
+    // чисто, либо честно отсутствует. Утверждать «PDF на месте» здесь нельзя: клон делается
+    // `git clone`, без `node_modules`, и в нём пересборка законно не проходит — ровно как у любого,
+    // кто ещё не сделал `npm i`. Это и есть исход, который обязан быть БЕЗОПАСНЫМ.
+    const pdfLeaks = leaksIn(join(ok, 'README.pdf'));
+    say(pdfLeaks === null || pdfLeaks.length === 0,
+      'README.pdf: старое зеркало с именем автора НЕ пережило прогон',
+      pdfLeaks === null ? 'отсутствует (пересборка недоступна в клоне без npm i)' : 'пересобран и чист');
+    say(/README\.pdf/.test(r1.stdout || ''), 'судьба README.pdf объявлена вслух, а не решена молча');
     const licenseLeaks = leaksIn(join(ok, 'LICENSE'));
     say(licenseLeaks !== null && licenseLeaks.length > 0 && /LICENSE оставлен намеренно/.test(r1.stdout || ''),
       'LICENSE назван вслух как осознанное исключение, а не пропущен молча');
@@ -279,13 +288,41 @@ if (existsSync(svcs)) {
 
 // README.pdf: ЗЕРКАЛО README.md, а не самостоятельный файл (реестр пар в AGENT_GUIDE.md). Текст
 // источника обезличивается, а двоичное зеркало оставалось прежним и несло GitHub-хендл автора
-// внутри (bugs/24). Правило реестра — зеркало не подпиливается на месте: его пересобирают у
-// источника. Здесь удаляем и говорим, чем вернуть: пересборка тянет playwright/Chromium, которого
-// в свежем клоне может не быть, а удаление обратимо одной командой.
+// внутри (bugs/24). Правило реестра — зеркало не подпиливается на месте: его пересобирают у источника.
+//
+// ⭐ РЕШЕНИЕ ВЛАДЕЛЬЦА (`interviews/interview_011`, Q2 = A от 2026-08-02): **пересобирать**, а не
+// удалять — «пользователь получает документ, которым можно пользоваться».
+//
+// Порядок здесь НЕ переставляется, и вот почему: сначала СТАРОЕ ЗЕРКАЛО УДАЛЯЕТСЯ ВСЕГДА, и только
+// потом делается попытка собрать новое. Устаревший PDF — это и есть утечка личности; он не имеет
+// права пережить прогон ни при каком исходе пересборки. Не собралось — копия остаётся БЕЗ PDF, и
+// инструмент говорит это вслух вместе с командой возврата. Молчаливое «оставлю как было» здесь
+// означало бы ровно тот дефект, ради которого писан `bugs/24`.
+//
+// ⚠️ Прежний комментарий утверждал, что «пересборка тянет playwright/Chromium» — это было НЕВЕРНО:
+// `render-pdf.mjs` работает через СИСТЕМНЫЙ Chrome/Edge (он есть на любой Windows) плюс npm-пакет
+// `marked`. То есть в свежем клоне мешает не браузер, а невыполненный `npm i`.
 const readmePdf = join(ROOT, 'README.pdf');
-if (existsSync(readmePdf)) {
-  act('удалить README.pdf (зеркало README.md; вернуть: node tools/render-pdf.mjs)');
-  if (APPLY) rmSync(readmePdf, { force: true });
+const readmeMd = join(ROOT, 'README.md');
+if (existsSync(readmePdf) || existsSync(readmeMd)) {
+  act('README.pdf: снять старое зеркало и пересобрать из обезличенного README.md');
+  if (APPLY) {
+    rmSync(readmePdf, { force: true });                       // утечка не выживает НИ ПРИ КАКОМ исходе
+    const r = spawnSync(process.execPath, [join(ROOT, 'tools', 'render-pdf.mjs'), readmeMd, readmePdf], {
+      cwd: ROOT, encoding: 'utf8', timeout: 180_000, windowsHide: true,
+    });
+    if (r.status === 0 && existsSync(readmePdf)) {
+      console.log('  ✅ README.pdf пересобран из обезличенного README.md');
+    } else {
+      const why = /Cannot find package 'marked'|ERR_MODULE_NOT_FOUND/.test(`${r.stderr}${r.stdout}`)
+        ? 'нет зависимостей (нужен `npm i`)'
+        : /Не найден Chrome/.test(`${r.stderr}${r.stdout}`)
+          ? 'не найден Chrome/Edge (укажи путь в переменной CHROME)'
+          : `код ${r.status}`;
+      console.log(`  ⚠ README.pdf НЕ пересобран — ${why}. Копия остаётся БЕЗ PDF (это безопасно).`);
+      console.log('     Вернуть: npm i && node tools/render-pdf.mjs README.md README.pdf');
+    }
+  }
 }
 
 // ── 3. Git: разорвать origin (и по флагу — стереть историю) ──────────────────
