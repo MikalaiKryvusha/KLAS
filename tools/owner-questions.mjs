@@ -1,0 +1,154 @@
+#!/usr/bin/env node
+// tools/owner-questions.mjs — ЧТО АГЕНТ ЖДЁТ ОТ ВЛАДЕЛЬЦА, одной командой.
+//
+// Зачем. Канон требует: всё, что агент хочет от владельца, живёт ТОЛЬКО в `interviews/` и
+// `homeworks/`. Правило было, а ИСПОЛНЯЕМОЙ КОМАНДЫ показа неотвеченного — не было: `AGENT_GUIDE.md`
+// это прямо признавал, и держалось всё на дисциплине. Дисциплина в теряющих контекст сессиях —
+// худшее из возможных хранилищ: свежая сессия просто не знает, что владельцу должны ответ.
+//
+// ⛔ ЧЕМ ЭТОТ ОХРАННИК КРАСНЕЕТ, А ЧЕМ НЕТ — это главное решение в файле.
+//   · Открытые вопросы владельцу — НЕ повод падать. Это его право думать сколько нужно, и падение
+//     на них означало бы, что `/end-chat` невозможен, пока владелец не ответил. Они печатаются.
+//   · А вот РАСХОЖДЕНИЕ «статус говорит „отвечено“, но ответы в файле пустые» — это провал АГЕНТА:
+//     ответы прозвучали в чате и не перенесены в документ, то есть следующая сессия их не найдёт.
+//     Вот на этом охранник и падает. Он судит СВОЮ работу, а не терпение владельца.
+//
+// Запуск:
+//   node tools/owner-questions.mjs             ← показать очередь владельца
+//   node tools/owner-questions.mjs --selftest  ← доказать, что охранник умеет краснеть
+//
+// [TESTED: 2026-08-01 · самопроверка 6/6; на живом дереве нашёл перенос ответов, потерянный в чате]
+
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const DIRS = ['interviews', 'homeworks'];
+
+// Строка статуса — единственный АВТОРИТЕТНЫЙ признак. Пустые «Ответ:» вторичны: владелец имеет
+// право ответить словами в чате, и тогда агент обязан перенести ответ в файл (см. охранник ниже).
+const STATUS_RE = /^\s*>?\s*\*{0,2}Статус:?\*{0,2}\s*(.+)$/m;
+const ANSWERED = /✅|ОТВЕЧЕНО|ОТВЕТЫ ПОЛУЧЕНЫ|ПРОЙДЕНА|ЗАКРЫТО/i;
+const WAITING = /❓|🟡|🟢|ЖДЁТ|ЖДУТ|ОЖИДАЕТ/i;
+// ⚠️ ОТВЕТ ЗАПИСЫВАЕТСЯ ТРЕМЯ СПОСОБАМИ, и охранник обязан знать все.
+// Первая версия знала один и дважды покраснела на ИСПРАВНЫХ документах: `interview_006` отвечен
+// ТАБЛИЦЕЙ решений внизу, `homeworks/04` — разделом с ВЕРДИКТОМ владельца. Охранник, кричащий на
+// правильном, быстро научает себя игнорировать, поэтому оба случая стали фикстурами самопроверки.
+const ANSWER_LINE_RE = /^\*{0,2}Ответ[^:\n]{0,40}:\*{0,2}(.*)$/;
+const DECISION_ROW_RE = /^\|(?!\s*-{2,})[^|\n]+\|[^|\n]*\|/gm;
+const VERDICT_RE = /^#{1,4}\s*.*(Вердикт|Ответ владельца|Решени)/mi;
+
+/** Заполнена ли строка ответа. ⚠️ Считаем ПОСТРОЧНО, а не одной регуляркой: жадная версия пятилась
+ *  и принимала вторую звёздочку в «**Ответ:**» за текст ответа, из-за чего пустое выглядело
+ *  заполненным. Разметка (звёздочки, подчерки, кавычки) текстом не считается. */
+function countAnswers(text) {
+  let filled = 0;
+  let empty = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(ANSWER_LINE_RE);
+    if (!m) continue;
+    if (m[1].replace(/[*_`~\s]/g, '')) filled++; else empty++;
+  }
+  return { filled, empty };
+}
+
+/** Разбор ОДНОГО документа. Чистая функция — её же гоняет самопроверка на строках-фикстурах. */
+export function parseDoc(name, text) {
+  const m = text.match(STATUS_RE);
+  const status = m ? m[1].trim().replace(/\s+/g, ' ').slice(0, 90) : null;
+  const answered = status ? ANSWERED.test(status) : false;
+  const waiting = status ? WAITING.test(status) && !answered : !status;
+  const { filled, empty: emptyAnswers } = countAnswers(text);
+  // Свидетельство ответа — любое из трёх: заполненная строка «Ответ:», таблица решений, раздел с
+  // вердиктом владельца. Ноль свидетельств при статусе «отвечено» и есть настоящее расхождение.
+  const decisionsPart = text.split(/^#{1,4}\s*.*(?:Решени|Вердикт)/m)[1] || '';
+  const decisionRows = (decisionsPart.match(DECISION_ROW_RE) || []).length;
+  const hasVerdict = VERDICT_RE.test(text) && decisionsPart.replace(/\s/g, '').length > 40;
+  const evidence = filled + decisionRows + (hasVerdict ? 1 : 0);
+  return {
+    name,
+    status,
+    answered,
+    waiting,
+    emptyAnswers,
+    evidence,
+    // Расхождение: сказано «отвечено», а свидетельств ответа в документе НЕТ ВООБЩЕ — ни
+    // заполненных строк, ни таблицы решений. Значит ответ прозвучал в чате и потерян для будущего.
+    drift: answered && evidence === 0,
+    // Нет строки статуса вовсе — документ не встроен в конвенцию, и его никто не заметит.
+    noStatus: !status,
+  };
+}
+
+function selftest() {
+  const cases = [
+    ['ждёт — статус ❓', '> Статус: **❓ ЖДЁТ ОТВЕТА ВЛАДЕЛЬЦА.**\n\n**Ответ:**\n',
+      (r) => r.waiting && !r.drift && r.emptyAnswers === 1],
+    ['отвечено — ✅ и ответ заполнен', '> Статус: ✅ **ОТВЕЧЕНО (2026-08-01)**\n\n**Ответ:** взяли A\n',
+      (r) => r.answered && !r.drift && r.emptyAnswers === 0],
+    ['РАСХОЖДЕНИЕ: ✅, но ответов нет нигде', '> Статус: **✅ ОТВЕТЫ ПОЛУЧЕНЫ**\n\n**Ответ:**\n\n**Ответ:**\n',
+      (r) => r.drift && r.emptyAnswers === 2],
+    // ⭐ Настоящий случай из дерева (`interview_006`), на котором первая версия охранника покраснела
+    // зря: места «Ответ:» пусты, но решения записаны ТАБЛИЦЕЙ внизу. Это исправный документ.
+    ['✅ + пустые «Ответ:», но есть таблица решений — НЕ расхождение',
+      '> Статус: **✅ ОТВЕЧЕНО В ЧАТЕ И ИСПОЛНЕНО** — решения в таблице внизу.\n\n**Ответ:**\n\n'
+      + '## Решения\n\n| Вопрос | Решение | Разнесено в |\n|---|---|---|\n| Q1 | **A** — взяли | llama-swap |\n',
+      (r) => r.answered && !r.drift && r.evidence > 0],
+    ['домашка ждёт', '> **Статус:** 🟢 **ЖДЁТ ТВОЕГО МИКРОФОНА.**\n', (r) => r.waiting],
+    // ⭐ Второй настоящий случай (`homeworks/04`): домашка отвечена РАЗДЕЛОМ С ВЕРДИКТОМ, ни строк
+    // «Ответ:», ни таблицы там нет. Первая версия охранника краснела и на нём.
+    ['домашка пройдена: вердикт разделом — НЕ расхождение',
+      '> **Статус:** ✅ **ПРОЙДЕНА 2026-08-01.**\n\n## Вердикт владельца (дословно)\n\n'
+      + '> Вроде работает. Но не могу перебить, когда они отвечают — хотелось бы перебивать их пока говорят.\n',
+      (r) => r.answered && !r.drift && r.evidence > 0],
+    ['без статуса вовсе', '# Просто документ\n\nтекст\n', (r) => r.noStatus && r.waiting],
+  ];
+  let bad = 0;
+  console.log('\n=== Самопроверка охранника очереди владельца ===\n');
+  for (const [name, text, check] of cases) {
+    const r = parseDoc('<fixture>', text);
+    const ok = check(r);
+    if (!ok) bad++;
+    console.log(`  ${ok ? 'OK    ' : 'ПРОВАЛ'} ${name}`);
+  }
+  console.log(`\n=== ${cases.length - bad}/${cases.length} ===`);
+  process.exit(bad ? 1 : 0);
+}
+
+if (process.argv.includes('--selftest')) selftest();
+
+// ── Обход ────────────────────────────────────────────────────────────────────
+const docs = [];
+for (const dir of DIRS) {
+  const full = path.join(ROOT, dir);
+  let files = [];
+  try { files = readdirSync(full); } catch { continue; }
+  for (const f of files.sort()) {
+    if (!f.endsWith('.md') || f === 'README.md') continue;
+    docs.push({ dir, ...parseDoc(`${dir}/${f}`, readFileSync(path.join(full, f), 'utf8')) });
+  }
+}
+
+const waiting = docs.filter((d) => d.waiting);
+const drifted = docs.filter((d) => d.drift);
+
+console.log('\n═══ ОЧЕРЕДЬ ВЛАДЕЛЬЦА ═══\n');
+if (!waiting.length) console.log('  Пусто — агент ничего не ждёт от владельца.');
+for (const d of waiting) {
+  console.log(`  ❓ ${d.name}`);
+  if (d.status) console.log(`     ${d.status}`);
+  if (d.emptyAnswers) console.log(`     вопросов без ответа: ${d.emptyAnswers}`);
+  if (d.noStatus) console.log('     ⚠️ нет строки «Статус:» — документ выпадает из конвенции');
+}
+
+console.log(`\nВсего документов: ${docs.length} · ждут владельца: ${waiting.length} · закрыто: ${docs.filter((d) => d.answered).length}`);
+
+if (drifted.length) {
+  console.error('\n⛔ ДОЛГ АГЕНТА, А НЕ ВЛАДЕЛЬЦА: статус говорит «отвечено», а места для ответов пусты.');
+  console.error('   Значит ответ прозвучал в чате и не перенесён в документ — следующая сессия его НЕ НАЙДЁТ.');
+  for (const d of drifted) console.error(`   · ${d.name} — пустых «Ответ:»: ${d.emptyAnswers}`);
+  console.error('   Перенеси ответы владельца в файлы дословно и повтори.\n');
+  process.exit(1);
+}
+console.log('');
