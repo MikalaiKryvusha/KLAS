@@ -42,6 +42,24 @@ function arg(name, dflt) {
 const SLUG = arg('slug', 'jarvis');
 const TEST_EVERY = Math.max(2, parseInt(arg('test-every', '10'), 10) || 10);
 
+// ⭐ ПЕРЕКРЁСТНЫЕ НЕГАТИВЫ — положительные клипы ДРУГОГО активатора, поданные как отрицательные.
+//
+// Зачем. Замер 2026-08-01 показал асимметрию: `joy` чист (2/2 при 0 ложных), а `jarvis` при 4/4
+// верных даёт ДВА ложных — на «Джои, включи музыку» (0.834) и на ловушку «джазовая/джем» (0.962).
+// Причина видна в составе партии обучения: 1024 предвычисленных негатива против 50 наших текстовых
+// и 50 положительных. Наших ТРУДНЫХ негативов исчезающе мало, а клипов чужого имени нет ВОВСЕ —
+// хотя «Джои» и «Джарвис» делят начало «дж». Короткому «Джой» соседей в языке меньше, поэтому ему
+// хватило и без этого.
+//
+// Путаница двух активаторов ХУЖЕ пропуска: они выбирают РАЗНЫЕ персоны, и ассистент ответил бы не
+// тем голосом. Поэтому чужое имя обязано быть в негативах явно.
+//
+// Материал уже синтезирован (по 10 000 клипов на имя) — это правка раскладки, а не новый синтез.
+const CROSS = arg('cross', '');
+// Сколько чужих клипов брать. Ровняем на объём СВОИХ негативов: перекос в любую сторону сдвигает
+// баланс классов, а лечим мы конкретную путаницу, а не «побольше негативов вообще».
+const CROSS_RATIO = 1.0;
+
 const corpusDir = path.join(CORPUS_ROOT, SLUG);
 const cleanPath = path.join(corpusDir, 'manifest.clean.json');
 const manifest = JSON.parse(readFileSync(cleanPath, 'utf8'));
@@ -75,6 +93,40 @@ for (const c of clips) {
   const key = `${positive ? 'positive' : 'negative'}_${isTest ? 'test' : 'train'}`;
   copyFileSync(path.join(corpusDir, c.file), path.join(dirs[key], path.basename(c.file)));
   counts[key]++;
+}
+
+// --- Перекрёстные негативы --------------------------------------------------------------------------
+let crossAdded = 0;
+if (CROSS) {
+  const crossDir = path.join(CORPUS_ROOT, CROSS);
+  const crossManifestPath = path.join(crossDir, 'manifest.clean.json');
+  if (!existsSync(crossManifestPath)) {
+    console.error(`❌ Нет ${crossManifestPath} — сначала собери и проверь корпус «${CROSS}».`);
+    process.exit(1);
+  }
+  const crossManifest = JSON.parse(readFileSync(crossManifestPath, 'utf8'));
+
+  // Берём ТОЛЬКО положительные чужого корпуса: именно они несут чужое имя, ради которого всё это.
+  // Чужие негативы брать незачем — они уже покрыты своими (тексты в генераторе общие).
+  const crossPos = crossManifest.clips
+    .filter((c) => c.file.startsWith('positive/'))
+    .sort((a, b) => a.file.localeCompare(b.file));
+
+  const want = Math.min(crossPos.length, Math.round((counts.negative_train + counts.negative_test) * CROSS_RATIO));
+  // Прореживаем РАВНОМЕРНО по отсортированному списку, а не берём первые N: имя файла кодирует
+  // диктора, темп, обрамление и номер повтора, поэтому равномерный шаг сохраняет всё разнообразие,
+  // тогда как «первые N» дали бы один голос на одном темпе.
+  const step = crossPos.length / want;
+  for (let i = 0; i < want; i++) {
+    const c = crossPos[Math.floor(i * step)];
+    const isTest = i % TEST_EVERY === 0;
+    const key = `negative_${isTest ? 'test' : 'train'}`;
+    // Префикс `cross__` в имени — чтобы в каталоге было ВИДНО, откуда клип. Молчаливое смешение
+    // источников в одной папке потом не распутать.
+    copyFileSync(path.join(crossDir, c.file), path.join(dirs[key], `cross__${CROSS}__${path.basename(c.file)}`));
+    counts[key]++;
+    crossAdded++;
+  }
 }
 
 // --- Конфиг обучения -------------------------------------------------------------------------------
@@ -166,6 +218,7 @@ writeFileSync(configPath, config, 'utf8');
 
 console.log(`Слово: «${manifest.word}»  (${SLUG})`);
 console.log(`Источник: ${cleanPath}`);
+if (crossAdded) console.log(`Перекрёстные негативы из «${CROSS}»: ${crossAdded} клипов чужого имени`);
 for (const [k, v] of Object.entries(counts)) console.log(`  ${k.padEnd(16)} ${v}`);
 console.log(`Конфиг: ${configPath}`);
 
