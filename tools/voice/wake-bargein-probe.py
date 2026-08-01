@@ -235,6 +235,75 @@ def aec_converge(mic, spk, seconds):
               f"({'фильтр сходится' if drop > 3 else 'сходимости не видно'})")
 
 
+def kill_latency(device, repeats=3):
+    """СКОЛЬКО ПРОХОДИТ ОТ «УБИЛИ ПРОИГРЫВАТЕЛЬ» ДО ТИШИНЫ В КОМНАТЕ.
+
+    Зачем мерить. При перебивании слушатель ждёт этот срок, прежде чем начать писать вопрос
+    (`bugs/26`), и число до сих пор было ОЦЕНКОЙ — 0.32 с. Владелец на живом тесте показал, что
+    оценка мала: в записанный вопрос попало «яра» — хвост фразы «Я рада». Подбирать вслепую нельзя:
+    слишком мало — пишем чужую речь, слишком много — съедаем начало фразы владельца.
+
+    Как мерится. Играем ровный тон, в известный момент убиваем проигрывателя, пишем микрофон и
+    ищем, когда уровень упал ниже порога речи. Разница и есть искомая задержка. Повторяем несколько
+    раз: одиночный замер здесь ничего не стоит (планировщик и буферы гуляют).
+    """
+    tone_wav = os.path.join(OUT_DIR, "kill-latency-tone.wav")
+    t = np.arange(int(3.0 * SR)) / SR
+    # Ровный тон 440 Гц с мягкими краями: ищем МОМЕНТ пропадания, поэтому важна стабильная громкость.
+    env = np.clip(np.minimum(t / 0.05, (3.0 - t) / 0.05), 0, 1)
+    sf.write(tone_wav, (0.35 * np.sin(2 * np.pi * 440 * t) * env).astype(np.float32), SR, subtype="PCM_16")
+
+    results = []
+    for i in range(repeats):
+        rec = os.path.join(OUT_DIR, f"kill-latency-{i}.wav")
+        cap = subprocess.Popen(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "dshow",
+             "-i", f"audio={device}", "-ac", "1", "-ar", str(SR), "-t", "3.0", rec],
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        time.sleep(0.6)                                   # даём записи реально начаться
+        play = subprocess.Popen(
+            ["powershell", "-NoProfile", "-Command",
+             f"(New-Object Media.SoundPlayer '{tone_wav}').PlaySync()"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        t_start = time.time()
+        time.sleep(1.2)                                   # тон уже точно звучит
+        play.kill()
+        t_kill = time.time() - t_start                    # секунда убийства от начала записи звука
+        cap.wait()
+
+        if not os.path.exists(rec):
+            print("  запись не удалась")
+            return
+        x = np.abs(to_16k_mono(rec) * 32767.0)
+        # Порог: половина медианы того, что звучало ДО убийства, но не ниже пола шума комнаты.
+        before = x[int(0.7 * SR):int((0.6 + t_kill) * SR)]
+        if not len(before) or before.mean() < 5:
+            print("  тон не слышен в микрофоне — проверь, что звук идёт в те же колонки")
+            return
+        thr = max(before.mean() * 0.25, 8.0)
+        after = x[int((0.6 + t_kill) * SR):]
+        # Ищем ПЕРВЫЙ кадр, после которого уровень больше не поднимается выше порога: одиночный
+        # провал внутри звука не считается концом.
+        frames = [after[j:j + FRAME].mean() for j in range(0, max(len(after) - FRAME, 0), FRAME)]
+        silent_from = None
+        for j, m in enumerate(frames):
+            if m < thr and all(v < thr for v in frames[j:j + 3]):
+                silent_from = j
+                break
+        if silent_from is None:
+            print(f"  прогон {i + 1}: тишина так и не наступила за {len(after)/SR:.1f} с после убийства")
+            continue
+        ms = silent_from * FRAME / SR * 1000
+        results.append(ms)
+        print(f"  прогон {i + 1}: тишина через {ms:.0f} мс после убийства проигрывателя")
+
+    if results:
+        print(f"\n  ⇒ задержка «убили → тихо»: медиана {np.median(results):.0f} мс "
+              f"(разброс {min(results):.0f}…{max(results):.0f})")
+        rec = np.median(results) / 1000 * 1.5
+        print(f"  рекомендация для --speaking-tail: {rec:.2f} с (медиана × 1.5 на разброс)")
+
+
 def selfcheck(model):
     """СТЕНД ОБЯЗАН ДОКАЗАТЬ, ЧТО ЕМУ МОЖНО ВЕРИТЬ — до того, как его числа попадут в документ.
 

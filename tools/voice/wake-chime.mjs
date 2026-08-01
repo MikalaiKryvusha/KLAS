@@ -23,13 +23,19 @@
 //
 // [NOT-TESTED] — судит ухо владельца, а не агент: «приятное» это перцептивный критерий (класс TASTE).
 
-import { mkdirSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const OUT = 'F:\\KLAS\\voice\\out\\chimes';
 const SR = 16000;
-const args = process.argv.slice(2);
+// Файл живёт двумя жизнями: как инструмент выслушки (запуск из терминала) и как БИБЛИОТЕКА звуков
+// для диспетчера голоса. Второе появилось, когда владелец выбрал сигналы и сказал внедрять: держать
+// тембры в двух местах — верный способ, чтобы они разъехались (тот же урок, что с парой «открытие /
+// закрытие»). Поэтому разбор аргументов и проигрывание живут под проверкой «меня запустили прямо».
+const IS_CLI = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
+const args = IS_CLI ? process.argv.slice(2) : [];
 const playArg = (() => { const i = args.indexOf('--play'); return i >= 0 ? args[i + 1] : null; })();
 
 // Пиковая амплитуда ОДНА на все варианты: сравнивать надо тембр, а не громкость. Человек, слушая
@@ -196,7 +202,25 @@ function toWav(samples) {
 const play = (file) => spawnSync('powershell', ['-NoProfile', '-Command',
   `(New-Object Media.SoundPlayer '${file}').PlaySync()`], { stdio: 'ignore' });
 
-// ── Сборка ───────────────────────────────────────────────────────────────────
+// ── Библиотека для остального тракта ─────────────────────────────────────────
+/** Все доступные сигналы: имя → генератор. Один источник тембров на весь проект. */
+export const CHIMES = { ...CANDIDATES, ...WARM };
+
+/**
+ * Отдать ПУТЬ к wav-файлу сигнала, собрав его при необходимости.
+ * Звук собирается КОДОМ и лежит вне git — как и бип до него: бинарник ради трети секунды синуса
+ * лишний, а генератор и есть воспроизводимый исходник.
+ */
+export function ensureChime(name, dir = OUT) {
+  if (!CHIMES[name]) throw new Error(`нет сигнала «${name}». Есть: ${Object.keys(CHIMES).join(', ')}`);
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${name}.wav`);
+  if (!existsSync(file)) writeFileSync(file, toWav(CHIMES[name]()));
+  return file;
+}
+
+// ── Сборка (только при запуске из терминала) ─────────────────────────────────
+if (!IS_CLI) { /* импортировали как библиотеку — ничего не делаем */ } else {
 mkdirSync(OUT, { recursive: true });
 // Семейство выбирается флагом: `--warm` собирает и склеивает ВАРИАНТЫ выбранного владельцем звука,
 // чтобы на выслушке рядом стояли только сравнимые вещи, а не всё подряд.
@@ -210,6 +234,25 @@ const names = args.includes('--warm') ? ['warm-low', ...Object.keys(WARM)] : Obj
 // Старые файлы убираются ПЕРЕД записью: иначе в каталоге лежат вперемешку звуки разных поколений,
 // и «послушал не тот файл» становится вопросом везения.
 for (const f of readdirSync(OUT)) if (f.endsWith('.wav')) rmSync(path.join(OUT, f), { force: true });
+
+// ── Прослушать ПАРУ так, как она прозвучит в бою ────────────────────────────
+// Владелец выбирает не два звука по отдельности, а РОЛИ: «слушаю» и «перестал слушать». Порознь
+// они оба могут нравиться и при этом сливаться на слух — судить надо пару, с той же паузой между
+// ними, какая будет в разговоре.
+const pairArg = (() => { const i = args.indexOf('--pair'); return i >= 0 ? args[i + 1] : null; })();
+if (pairArg) {
+  const [openName, closeName] = pairArg.split(',').map((s) => s.trim());
+  const missing = [openName, closeName].filter((n) => !({ ...CANDIDATES, ...WARM })[n]);
+  if (missing.length) { console.error(`нет вариантов: ${missing.join(', ')}`); process.exit(1); }
+  const all = { ...CANDIDATES, ...WARM };
+  // 4 секунды между сигналами — примерно столько молчит человек, прежде чем окно закроется.
+  const f = path.join(OUT, 'pair.wav');
+  writeFileSync(f, toWav(concat([all[openName](), silence(4), all[closeName]()])));
+  console.log(`пара: «${openName}» → (4 с тишины) → «${closeName}»`);
+  console.log('  первый = услышал имя / открылось окно;  второй = окно закрылось');
+  play(f);
+  process.exit(0);
+}
 
 if (playArg && playArg !== 'all') {
   const f = path.join(OUT, `${playArg}.wav`);
@@ -234,3 +277,4 @@ console.log(`\nСклейка подряд: ${allFile}`);
 console.log('Послушать:  node tools/voice/wake-chime.mjs --play all   (или --play <имя>)');
 
 if (playArg === 'all') { console.log('\nиграю склейку'); play(allFile); }
+}   // конец блока «запущен из терминала»

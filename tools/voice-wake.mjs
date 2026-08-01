@@ -16,8 +16,13 @@
 //      выбора: AEC у нас нет, значит детектор слышит и СОБСТВЕННЫЙ голос из колонок (EXP-0017), и
 //      ложное самоперебивание возможно. Каждое перебивание печатается с оценкой — чтобы это было
 //      видно, а не гадаемо. Обратный режим оставлен флагом `--mute-while-speaking`.
-//   2. Короткий бип сразу после имени — сигнал «услышал». Не голосом: голос стоил бы ~1 с на каждое
-//      обращение.
+//   2. Сигнал сразу после имени — «услышал». Не голосом: голос стоил бы ~1 с на каждое обращение.
+//      ⚠️ Первый вариант (синус 880 Гц, атака 10 мс) владелец забраковал вживую: «неприятный, пик
+//      какой-то». Заменён семейством колокольчиков (`homeworks/05`), тембры — в `wake-chime.mjs`.
+//      Ролей у сигнала две и звучат они по-разному: ОТКРЫТИЕ слушания (`--chime-open`, по умолчанию
+//      `bell`) и ЗАКРЫТИЕ, когда позвали и промолчали (`--chime-close`, по умолчанию `bell-deep` —
+//      выбран владельцем). Нисходящий тембр на закрытии — его прямое требование: без него молчание
+//      неотличимо от «он всё ещё ждёт».
 //
 // Использование:
 //   node tools/voice-wake.mjs                       → слушать микрофон, пока не Ctrl+C
@@ -34,10 +39,11 @@
 // [NOT-TESTED на живом микрофоне] — сквозной прогон из файла пройден 2026-08-01, вердикт за владельцем.
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { rmSync } from 'node:fs';   // остальное ушло вместе с самодельным бипом (сигналы — в wake-chime.mjs)
 import path from 'node:path';
 import readline from 'node:readline';
 import { TtsDaemon } from './voice/tts-daemon.mjs';
+import { ensureChime } from './voice/wake-chime.mjs';
 import { gatewayAlive, gatewayToken, runTurn, VOICE_STYLE } from './voice/pipeline.mjs';
 import { acquireVoiceSession } from './voice/single-instance.mjs';
 import { PERSONAS, personaByDetector } from './voice/personas.mjs';
@@ -46,7 +52,7 @@ import { hear } from './voice/ears.mjs';
 const OUT_DIR = 'F:\\KLAS\\voice\\out';
 const PY_WAKE = 'F:\\KLAS\\voice\\venv-wakeword\\Scripts\\python.exe';   // venv активаторов (вне git)
 const LISTENER = path.join(import.meta.dirname, 'voice', 'wakeword-listen.py');
-const BEEP = path.join(OUT_DIR, 'wake-beep.wav');
+const CHIME_DIR = path.join(OUT_DIR, 'chimes');
 
 const args = process.argv.slice(2);
 const flag = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : null; };
@@ -65,26 +71,28 @@ for (const [slug, opt] of [['jarvis', '--voice-jarvis'], ['joy', '--voice-joy']]
   if (v) PERSONAS[slug].voice = v;
 }
 
-// --- Бип «услышал»: 0.15 с, 880 Гц, со сглаженными краями ---
-// Собирается кодом, а не хранится файлом: бинарник в git ради 4 КБ синуса — лишняя сущность, а
-// «сделал руками — оставь скрипт» здесь выполняется тем, что генератор И ЕСТЬ исходник (план 19,
-// разбор невоспроизводимой фикстуры).
-function ensureBeep() {
-  if (existsSync(BEEP)) return BEEP;
-  const sr = 16000, sec = 0.15, n = Math.round(sr * sec), fade = Math.round(sr * 0.01);
-  const pcm = Buffer.alloc(n * 2);
-  for (let i = 0; i < n; i++) {
-    const env = Math.min(1, i / fade, (n - i) / fade);   // без сглаживания края дают щелчок
-    pcm.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 880 * i) / sr) * 9000 * env), i * 2);
+// --- Сигналы «слушаю» и «перестал слушать» ---
+// ⭐ Прежний бип (синус 880 Гц, атака 10 мс) владелец забраковал на живом тесте: «неприятный, пик
+// какой-то». Диагноз оказался измеримым — резкая атака даёт щелчок-удар, высокая частота режет,
+// голый синус звучит прибором. Выбор сделан выслушкой (`homeworks/05`): семейство колокольчиков,
+// закрытие — тот же тембр ниже. Сами тембры живут в ОДНОМ месте (`wake-chime.mjs`), сюда приходят
+// готовыми: две копии одного звука разъезжаются молча.
+//
+// Роли, дословно по владельцу: «один и тот же сигнал на обе роли» (услышал имя · открылось окно) и
+// «Если я не говорю и слушание прекращается, нужно в таком же тоне но снисходящим тоном проиграть
+// звук — мне индикация, что слушание остановлено».
+const chimeOpenName = flag('--chime-open') ?? 'bell';
+const chimeCloseName = flag('--chime-close') ?? 'bell-deep';
+let CHIME_OPEN = null;
+let CHIME_CLOSE = null;
+function ensureChimes() {
+  try {
+    CHIME_OPEN = ensureChime(chimeOpenName, CHIME_DIR);
+    CHIME_CLOSE = ensureChime(chimeCloseName, CHIME_DIR);
+  } catch (e) {
+    console.error(`Сигналы не собрались: ${e.message}`);
+    process.exit(1);
   }
-  const h = Buffer.alloc(44);
-  h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8);
-  h.write('fmt ', 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
-  h.writeUInt32LE(sr, 24); h.writeUInt32LE(sr * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
-  h.write('data', 36); h.writeUInt32LE(pcm.length, 40);
-  mkdirSync(OUT_DIR, { recursive: true });
-  writeFileSync(BEEP, Buffer.concat([h, pcm]));
-  return BEEP;
 }
 
 // --- Воспроизведение ---
@@ -128,10 +136,10 @@ function playWav(wav) {
 // пропадало ровно в тот момент, когда оно нужнее всего, — владелец на живом микрофоне так и
 // сказал: «почему то не срабатыва… а вот теперь сработал пик» (`homeworks/04`, `bugs/25`).
 // Заодно бип больше не может занять `turn.player` и увести на себя следующее перебивание.
-function playBeep() {
-  if (!play) return;
-  const p = spawnPlayer(BEEP);
-  p.on('error', () => { /* нет звукового устройства — бип не критичен для хода */ });
+function playChime(file) {
+  if (!play || !file) return;
+  const p = spawnPlayer(file);
+  p.on('error', () => { /* нет звукового устройства — сигнал не критичен для хода */ });
 }
 
 function bargeIn(detector, score) {
@@ -213,7 +221,7 @@ if (!(await gatewayAlive())) {
   console.error('ЯДРО недоступно: гейтвей OpenClaw не поднят.\nПодними стек: powershell -File F:\\KLAS\\tools\\klas.ps1 -Action up');
   process.exit(1);
 }
-ensureBeep();
+ensureChimes();
 
 // `--parent`: слушатель обязан уйти вместе со мной. Без этого мой аварийный выход оставил бы
 // ffmpeg держать микрофон, и следующий запуск не смог бы его открыть.
@@ -262,12 +270,18 @@ readline.createInterface({ input: listener.stdout }).on('line', (line) => {
     if (!persona) { console.error(`Неизвестный детектор «${m.detector}» — раскладка персон разошлась с моделями`); return; }
     if (!bargeIn(m.detector, m.score)) console.log(`\n🔔 ${persona.name} (${m.score})`);
     // Сигнал «услышал» (решение владельца). Не ждём его окончания: слушатель уже пишет фразу.
-    // Замер 2026-08-01: 0.36 с накладных на запуск проигрывателя + 0.15 с самого тона.
-    // Бип звучит ВСЕГДА, в том числе на перебивании: именно там он и подтверждает, что услышан.
-    playBeep();
+    // Сигнал звучит ВСЕГДА, в том числе на перебивании: именно там он и подтверждает, что услышан.
+    playChime(CHIME_OPEN);
     return;
   }
-  if (m.event === 'empty') { console.log('   (только имя — жду вопроса)'); return; }
+  // Окно слушания закрылось: позвали и промолчали пять секунд. Нисходящий сигнал — прямое
+  // требование владельца: «мне индикация, что слушание остановлено». Без него молчание неотличимо
+  // от «он всё ещё ждёт» — тот же класс, ради которого появился сигнал «услышал».
+  if (m.event === 'empty') {
+    console.log('   (промолчал — слушание закрыто)');
+    playChime(CHIME_CLOSE);
+    return;
+  }
   if (m.event === 'utterance') {
     const persona = personaByDetector(m.detector);
     if (!persona) return;
