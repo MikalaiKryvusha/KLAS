@@ -77,6 +77,23 @@ const TEST_EVERY = Math.max(2, parseInt(arg('test-every', '10'), 10) || 10);
 // Потолок 1.6 с оставляет запас: слово плюс до 400 мс тишины укладывается в окно с правого края.
 const MAX_SECONDS = parseFloat(arg('max-seconds', '1.6'));
 
+// ⭐ И ГЛАВНЫЙ ПРИЗНАК: слово обязано ЗАКАНЧИВАТЬ фразу.
+//
+// Первый заход фильтровал по одной длительности — полнота выросла с 64.4% до 72.7%, но четверть
+// положительных по-прежнему не узнавалась. Причина в том, что длительность лишь КОСВЕННЫЙ признак.
+// «Джарвис, включи музыку» короткая (1.5 с), но слово в ней В НАЧАЛЕ: при выравнивании по правому
+// краю окна оно снова оказывается не в конце, и пример остаётся мусорным.
+//
+// Прямой признак — положение слова в ТЕКСТЕ. Годятся два вида обрамлений:
+//   «{W}.» «{W}!» «{W}?»            — слово и есть вся фраза;
+//   «Эй, {W}.» «Спасибо, {W}.»      — слово завершает фразу.
+// Не годятся «{W}, включи музыку» и подобные, где после имени идёт ещё речь.
+//
+// ⚠️ Это НЕ обедняет боевой сценарий. В живой речи владелец говорит «Джарвис, включи музыку», и
+// детектор обязан сработать СРАЗУ ПОСЛЕ ИМЕНИ — в этот момент окно как раз заканчивается на слове,
+// ровно как в обучении. Хвост фразы попадает уже в следующие окна и детектору не нужен.
+const WORD_AT_END_ONLY = !argv.includes('--allow-word-inside');
+
 const CROSS = arg('cross', '');
 // Сколько чужих клипов брать. Ровняем на объём СВОИХ негативов: перекос в любую сторону сдвигает
 // баланс классов, а лечим мы конкретную путаницу, а не «побольше негативов вообще».
@@ -105,8 +122,22 @@ for (const d of Object.values(dirs)) mkdirSync(d, { recursive: true });
 // Потолок длительности применяется ТОЛЬКО к положительным. У отрицательных положение слова не имеет
 // смысла (слова там нет), а длинная обычная речь — как раз ценный фон.
 const all = [...manifest.clips].sort((a, b) => a.file.localeCompare(b.file));
+
+// Слово завершает фразу? Смотрим текст, а не звук: после имени не должно оставаться букв.
+// Хвостовая пунктуация («Джарвис.», «Эй, Джарвис!») словом не считается и не мешает.
+const endsWithWord = (text) => {
+  const i = text.lastIndexOf(manifest.word);
+  if (i < 0) return false;
+  return !/[\p{L}\p{N}]/u.test(text.slice(i + manifest.word.length));
+};
+
+const badPos = (c) => c.file.startsWith('positive/')
+  && (c.seconds > MAX_SECONDS || (WORD_AT_END_ONLY && !endsWithWord(c.text)));
+
 const tooLong = all.filter((c) => c.file.startsWith('positive/') && c.seconds > MAX_SECONDS);
-const clips = all.filter((c) => !(c.file.startsWith('positive/') && c.seconds > MAX_SECONDS));
+const wordInside = all.filter((c) => c.file.startsWith('positive/')
+  && c.seconds <= MAX_SECONDS && WORD_AT_END_ONLY && !endsWithWord(c.text));
+const clips = all.filter((c) => !badPos(c));
 const counts = { positive_train: 0, positive_test: 0, negative_train: 0, negative_test: 0 };
 
 // Счётчики ведутся ОТДЕЛЬНО для положительных и отрицательных, иначе шаг «каждый N-й» сместится:
@@ -244,8 +275,9 @@ writeFileSync(configPath, config, 'utf8');
 
 console.log(`Слово: «${manifest.word}»  (${SLUG})`);
 console.log(`Источник: ${cleanPath}`);
-console.log(`Потолок длительности положительных: ${MAX_SECONDS} с — отсеяно ${tooLong.length} длинных `
-  + `(слово в них не попадает в конец окна и не узнаётся, см. шапку)`);
+console.log(`Отбор положительных (слово обязано попадать в КОНЕЦ окна — см. шапку):`);
+console.log(`  отсеяно длиннее ${MAX_SECONDS} с:            ${tooLong.length}`);
+console.log(`  отсеяно со словом НЕ в конце фразы:    ${wordInside.length}`);
 if (crossAdded) console.log(`Перекрёстные негативы из «${CROSS}»: ${crossAdded} клипов чужого имени`);
 for (const [k, v] of Object.entries(counts)) console.log(`  ${k.padEnd(16)} ${v}`);
 console.log(`Конфиг: ${configPath}`);
