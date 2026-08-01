@@ -97,6 +97,19 @@ const TIMEOUT_MIN = Number(opt('--timeout', '30'));
 const FORCE_SIGNAL = flag('--force-signal');
 const QUIET_OVERRIDE = FORCE_SIGNAL ? false : null;
 
+/**
+ * Имя проекта, которое страница называет вслух: «Спрашивает ИИ-агент KLAS».
+ *
+ * 🔑 Правка владельца 2026-08-02: у него НЕСКОЛЬКО проектов, и в каждом работает свой агент. Открыв
+ * страницу, он обязан за секунду понять, КТО спрашивает, — иначе вопрос приходится опознавать по
+ * содержанию. Значение — каноническое короткое имя из таблицы идентичности `AGENT_GUIDE.md`;
+ * при переносе контура в другой проект меняется РОВНО эта строка (или флаг `--project`).
+ */
+const PROJECT = opt('--project', process.env.KLAS_PROJECT || 'KLAS');
+
+/** Человеческая отметка времени: «02.08.2026, 00:20:15». Владелец читает её, а не ISO. */
+const stamp = (d = new Date()) => d.toLocaleString('ru-RU');
+
 // ─────────────────────────────────────────────────────────────────────────────
 // СТРАНИЦА
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,6 +162,16 @@ table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.92em}
 th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
 th{background:var(--code-bg)}
 .meta{color:var(--dim);font-size:.86rem}
+/* Шапка «кто спрашивает и когда» — правка владельца: у него несколько проектов, и открытая
+   страница обязана сама назвать проект и время, а не заставлять опознавать себя по содержанию. */
+.asks{color:var(--dim);font-size:.85rem;margin:0 0 6px}
+.asks b{color:var(--ink);font-weight:600}
+/* Счётчики состояния пилюлями: сколько ждёт и сколько отвечено — видно, не читая документ.
+   Цвета те же, что у полосы вопроса, чтобы пилюля и карточка читались одной системой. */
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 4px}
+.pill{font-size:.8rem;font-weight:600;padding:3px 12px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+.pill.open{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.pill.ok{color:var(--ok);border-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
 .q{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--line);
   border-radius:4px 12px 12px 4px;padding:16px 18px;margin:20px 0}
 .q.open{border-left-color:var(--warn)}
@@ -368,6 +391,12 @@ export function buildPage({ docPath, live }) {
   }
 
   const open = parsed.questions.filter((q) => !q.answered).length;
+  const done = parsed.questions.length - open;
+  // Пилюли рисуются, только когда в документе ЕСТЬ вопросы: у домашки их нет, и «ждут вас: 0 ·
+  // отвечено: 0» сказало бы владельцу неправду о том, что от него ничего не нужно.
+  const pills = parsed.questions.length
+    ? `<div class="pills"><span class="pill open">ждут вас: ${open}</span><span class="pill ok">отвечено: ${done}</span></div>`
+    : '<div class="pills"><span class="pill">вопросов нет — нужен ваш отклик</span></div>';
 
   const page = `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
@@ -377,9 +406,11 @@ export function buildPage({ docPath, live }) {
 <body data-doc="${esc(relPath)}" data-kind="${esc(meta.kind)}">
 <div class="wrap">
   <header class="top">
+    <p class="asks">Спрашивает ИИ-агент <b>${esc(PROJECT)}</b> · ${esc(stamp())}</p>
     <h1>${esc(meta.title)}</h1>
+    ${pills}
     <div class="meta">
-      ${esc(relPath)} · ${parsed.questions.length} вопрос(ов), ждут вас ${open}
+      ${esc(relPath)}
       ${meta.artifacts.length ? ` · артефактов на одобрение: ${meta.artifacts.length}` : ''}
     </div>
     ${parsed.statusRaw ? `<div class="meta">${mdToHtml(parsed.statusRaw)}</div>` : ''}
@@ -906,6 +937,14 @@ async function cmdBatch() {
    * порок «расскажу вместо сделаю», ради устранения которого контур и строился.
    */
   const batchPage = () => {
+    // Счётчики по ВСЕЙ пачке — чтобы владелец видел объём до того, как откроет первую карточку.
+    let totalOpen = 0;
+    let totalDone = 0;
+    for (const i of live) {
+      const iv = parseInterview(join(ROOT, i.doc), readMd(join(ROOT, i.doc)));
+      totalOpen += iv.questions.filter((x) => !x.answered).length;
+      totalDone += iv.questions.filter((x) => x.answered).length;
+    }
     const cards = live
       .map((i) => {
         const p = join(ROOT, i.doc);
@@ -929,7 +968,10 @@ async function cmdBatch() {
 a.card-link{display:block;text-decoration:none;color:inherit}
 a.card-link:hover{border-color:var(--accent)}
 </style></head><body><div class="wrap">
-<header class="top"><h1>Накопилось ${live.length} ${plural(live.length, 'документ', 'документа', 'документов')}</h1>
+<header class="top">
+<p class="asks">Спрашивает ИИ-агент <b>${esc(PROJECT)}</b> · ${esc(stamp())}</p>
+<h1>Накопилось ${live.length} ${plural(live.length, 'документ', 'документа', 'документов')}</h1>
+<div class="pills"><span class="pill open">ждут вас: ${totalOpen}</span><span class="pill ok">отвечено: ${totalDone}</span></div>
 <div class="meta">Пока вы были заняты, агент работал и складывал сюда всё, что решать не вправе.
 Нажмите карточку — откроется сам документ.</div>
 </header>${cards}</div></body></html>`;
