@@ -363,11 +363,20 @@ node tools/voice-roundtrip.mjs                        # самопроверка
 node tools/voice-bench.mjs --quick                    # бенч голосового тракта
 ```
 
+5. KLAS узнаёт своё имя. Обучены два детектора активации — «Джарвис» и «Джой», по 13.8 КБ каждый.
+   На проверке живым микрофоном они срабатывают на голос владельца и не срабатывают друг на друга.
+   Детектор слушает круглосуточно и стоит около половины процента одного процессорного ядра из
+   шестнадцати; видеопамять не занимает вовсе. Готовые детекторы для этого не годились: проверка
+   показала 3 из 6 и 0 из 10 срабатываний на русском произношении, поэтому модели обучены свои.
+
+```powershell
+voice\venv-wakeword\Scripts\python.exe tools\voice\wakeword-live.py --seconds 90
+```
+
 ### 9.3. Что в работе
 
-1. Запуск по имени («Джарвис», «Джой») не работает. Готовые детекторы отвергнуты замером
-   (KeywordSpotter — 3/6, готовая модель hey_jarvis — 0/10 на русском произношении); предстоит
-   обучение собственных моделей активации.
+1. Имя пока не открывает разговор. Детекторы работают, но диалог по-прежнему начинается нажатием
+   Enter; связка «услышал имя → началась беседа, и имя выбрало персону» ещё не сделана.
 2. Голоса персон Jarvis и Joi выбраны владельцем, но к живому диалогу не подключены: рядом с
    загруженной основной моделью свободно ~950 МБ видеопамяти, а движкам клонов требуется
    3 150 МБ. В живом диалоге говорит Silero.
@@ -385,8 +394,9 @@ node tools/voice-bench.mjs --quick                    # бенч голосов�
    устанавливается только полным развёртыванием (раздел 3.4).
 3. Выбор «установить анонимно» в мастере обезличивание не выполняет; анонимная копия делается
    командами раздела 3.5.
-4. Активация голосом по имени отсутствует — диалог ведётся по нажатию клавиши. Голоса персон к
-   живому диалогу не подключены.
+4. Имя пока не открывает разговор: детекторы «Джарвис» и «Джой» обучены и работают отдельной
+   командой, но диалог по-прежнему начинается нажатием клавиши. Голоса персон к живому диалогу
+   не подключены.
 5. Английские слова в речи произносятся транслитерацией кириллицей; честное двуязычное
    произношение появится с мультиязычным движком синтеза.
 6. Первый ход новой голосовой сессии занимает до ~50 секунд; последующие ходы — ~8 секунд.
@@ -776,11 +786,22 @@ node tools/voice-roundtrip.mjs                        # a pipeline self-check (c
 node tools/voice-bench.mjs --quick                    # the voice pipeline bench
 ```
 
+5. KLAS recognizes its own name. Two activation detectors are trained — "Jarvis" and "Joy",
+   13.8 KB each. In a live microphone check they fire on the owner's voice and do not fire on each
+   other. The detector listens around the clock and costs about half a percent of one processor core
+   out of sixteen; it takes no video memory at all. The ready-made detectors would not do: a
+   measurement showed 3 of 6 and 0 of 10 activations on Russian pronunciation, so the models were
+   trained here.
+
+```powershell
+voice\venv-wakeword\Scripts\python.exe tools\voice\wakeword-live.py --seconds 90
+```
+
 ### 9.3. What is underway
 
-1. Launching by name ("Jarvis", "Joi") does not work. The ready-made detectors were refuted by
-   measurement (KeywordSpotter — 3/6, the stock hey_jarvis model — 0/10 on Russian pronunciation);
-   training of own activation models lies ahead.
+1. The name does not open a conversation yet. The detectors work, but a dialog still begins with a
+   press of Enter; the link "the name was heard → the conversation began, and the name chose the
+   persona" is not made yet.
 2. The persona voices of Jarvis and Joi are chosen by the owner but not connected to the live
    dialog: with the main model loaded, ~950 MB of VRAM remain free, while the cloning engines
    require 3 150 MB. Silero speaks in the live dialog.
@@ -798,8 +819,9 @@ node tools/voice-bench.mjs --quick                    # the voice pipeline bench
    `qwen3.6-35b-a3b` is installed only by the full deployment (section 3.4).
 3. The "install anonymously" choice in the wizard performs no de-identification; an anonymous copy
    is made by the commands of section 3.5.
-4. Voice activation by name is absent — the dialog is conducted by a key press. The persona voices
-   are not connected to the live dialog.
+4. The name does not open a conversation yet: the "Jarvis" and "Joy" detectors are trained and work
+   as a separate command, but a dialog still begins with a key press. The persona voices are not
+   connected to the live dialog.
 5. English words in speech are pronounced transliterated into Cyrillic; honest bilingual
    pronunciation will arrive with a multilingual synthesis engine.
 6. The first turn of a new voice session takes up to ~50 seconds; the following turns — ~8
