@@ -17,6 +17,8 @@
  *   node tools/review.mjs --selftest            самотест ядра контура
  *
  * Флаги: --by "Имя" · --voice <голос> · --no-signal · --no-open · --no-serve · --timeout МИН · --port N
+ *         --force-signal — обойти тихие часы. ⛔ ТОЛЬКО по живому слову владельца; автономным
+ *         циклам запрещён (см. комментарий у FORCE_SIGNAL).
  *
  * ⚠️ ЗВУК В КОМНАТЕ. Сигнал звучит в динамики владельца — правило владельца требует предупреждать.
  * Любой АГЕНТСКИЙ прогон (проверки, пилот, отладка) обязан идти с `--no-signal`.
@@ -80,6 +82,20 @@ const VOICE = opt('--voice', process.env.KLAS_REVIEW_VOICE || 'eugene');
 const SAPI_VOICE = process.env.KLAS_SAPI_VOICE || 'Microsoft Irina Desktop';
 const VOICE_TOOL = opt('--voice-tool', process.env.KLAS_REVIEW_VOICE_TOOL || join(ROOT, 'tools', 'voice-say.mjs'));
 const TIMEOUT_MIN = Number(opt('--timeout', '30'));
+/**
+ * Обход тихих часов. ⛔ **ТОЛЬКО ПО ЖИВОМУ СЛОВУ ВЛАДЕЛЬЦА, В ТОТ ЖЕ МОМЕНТ.**
+ *
+ * Инвариант I6 регламента гласит: тихие часы важнее всего остального, включая явно заказанный
+ * уровень голоса. Он защищает дом от РЕШЕНИЙ АГЕНТА — и этот флаг его не отменяет, а сужает: решение
+ * принимает не агент, а человек, который эти часы и назначил, и принимает его вслух и сейчас.
+ *
+ * ⛔ **Автономным циклам (`/autoloop`, `/dayloop`, `/nightloop`, `/guarded-loop`) флаг ЗАПРЕЩЁН.**
+ * Ночной цикл существует ровно потому, что владелец спит. Разбудить его сигналом контура — худшее,
+ * что этот инструмент может сделать. Флаг не читается из переменной окружения намеренно: он должен
+ * быть НАПЕЧАТАН в команде живым человеком, а не унаследован окружением.
+ */
+const FORCE_SIGNAL = flag('--force-signal');
+const QUIET_OVERRIDE = FORCE_SIGNAL ? false : null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // СТРАНИЦА
@@ -529,6 +545,11 @@ export async function signal(say, { voice = VOICE, quiet = null } = {}) {
     console.log('🔇 Тихие часы (23:00–09:00) — сигнал подавлен. Страница ждёт владельца молча.');
     return { signalled: false, reason: 'тихие часы' };
   }
+  // Обход тихих часов виден в логе, а не только в аргументах: звук в доме ночью — это событие,
+  // и оно обязано быть объяснимым постфактум.
+  if (quiet === false && isQuiet(now)) {
+    console.log('🔊 ТИХИЕ ЧАСЫ ОБОЙДЕНЫ по явному флагу --force-signal. Сейчас прозвучит в комнате.');
+  }
   if (process.platform !== 'win32') {
     console.log('🔔 (сигнал звуком реализован для Windows; здесь — только текстом)');
     return { signalled: false, reason: 'не Windows' };
@@ -756,6 +777,7 @@ async function cmdOpen(docPath) {
     void signal(
       `Николай, вас зовёт ${kind}${title ? `: ${title}` : ''}. ` +
         `${open} ${plural(open, 'вопрос', 'вопроса', 'вопросов')} без ответа.`,
+      { quiet: QUIET_OVERRIDE },
     );
   }
 
@@ -963,6 +985,7 @@ a.card-link:hover{border-color:var(--accent)}
     await signal(
       `Николай, накопилось ${live.length} ${plural(live.length, 'документ', 'документа', 'документов')} ` +
         `на вашу вычитку: ${[...new Set(kinds)].join(', ')}.`,
+      { quiet: QUIET_OVERRIDE },
     );
   }
   console.log(`\nЖду ответов (до ${TIMEOUT_MIN} мин). Ctrl+C — прекратить, документы не изменятся.`);
