@@ -74,6 +74,15 @@ def rms(x):
     return float(np.sqrt(np.mean(np.square(x)))) or 1e-9
 
 
+def base_slug(model_name):
+    """Какому ИМЕНИ принадлежит модель. Поколения зовутся `jarvis_v4_prespeech`, `joy_v1_control` и
+    т.п., а клип имени и подпись берутся по базовому слугу — иначе сравнить поколения нечем."""
+    for s in WORD:
+        if model_name == s or model_name.startswith(s + "_"):
+            return s
+    raise SystemExit(f"не понял, какому имени принадлежит модель «{model_name}»")
+
+
 def pick_name_clip(slug):
     """Тот же выбор, что в wake-talk-fixture.py: слово ОБЯЗАНО заканчивать фразу (иначе модель его
     не учила), список сортируется, берётся середина — замер обязан быть повторяемым."""
@@ -89,9 +98,19 @@ def pick_name_clip(slug):
     return os.path.join(CORPUS, slug, good[len(good) // 2])
 
 
-def synth_assistant():
-    """Реплика ассистента ртом проекта — тем же, что звучит в бою."""
+def synth_assistant(resynth=False):
+    """Реплика ассистента ртом проекта — тем же, что звучит в бою.
+
+    ⛔ СТИМУЛ КЭШИРУЕТСЯ, И ЭТО НЕ ОПТИМИЗАЦИЯ. Silero стохастичен: два синтеза одного текста тем же
+    голосом дают РАЗНЫЙ звук (записано в каноне про генератор корпуса). Пока стимул пересинтезировался
+    на каждом запуске, у каждого прогона была своя помеха — и числа разных прогонов оказывались
+    несравнимы. Поймано числом 2026-08-01: один и тот же файл модели дал контроль 0.001 утром и 0.666
+    вечером. Теперь реплика синтезируется ОДИН раз и лежит файлом; `--resynth` пересоздаёт её
+    осознанно, и после этого прошлые числа сравнивать уже нельзя.
+    """
     wav = os.path.join(OUT_DIR, "bargein-assistant.wav")
+    if os.path.exists(wav) and not resynth:
+        return to_16k_mono(wav)
     node = shutil.which("node")
     if not node:
         raise SystemExit("node не найден в PATH")
@@ -318,6 +337,11 @@ def main() -> int:
     ap.add_argument("--room-is-quiet", action="store_true",
                     help="владелец предупреждён и подтвердил тишину — без этого живой замер не пойдёт")
     ap.add_argument("--device", default=MIC_DEFAULT)
+    ap.add_argument("--resynth", action="store_true",
+                    help="пересоздать реплику-стимул (после этого числа прошлых прогонов несравнимы)")
+    ap.add_argument("--models", default="",
+                    help="какие файлы моделей мерить В ОДНОМ прогоне, через запятую "
+                         "(напр. jarvis,jarvis_v4_prespeech) — только так сравнимы поколения")
     ap.add_argument("--echo-length", type=int, default=0,
                     help="длина хвоста эха для DSP, мс (звук через телевизор по HDMI приходит поздно)")
     ap.add_argument("--aec-converge", type=float, default=0.0,
@@ -339,20 +363,35 @@ def main() -> int:
     if missing:
         raise SystemExit(f"нет моделей: {missing}")
 
+    # ⚠️ Сравнивать поколения моделей ЧИСЛАМИ ИЗ РАЗНЫХ ПРОГОНОВ нельзя — это уже подвело на другом
+    # стенде (`wakeword-eval-fixed.py`: контрольная модель дала 73.7% и 35.0% в двух прогонах).
+    # Поэтому здесь можно подать ЛЮБЫЕ файлы моделей и получить их числа в ОДНОМ прогоне, на одних
+    # и тех же клипах: `--models jarvis,jarvis_v4_prespeech`.
+    if a.models:
+        paths = [os.path.join(TRAINED, f"{n.strip()}.onnx") for n in a.models.split(",") if n.strip()]
+        missing = [p for p in paths if not os.path.exists(p)]
+        if missing:
+            raise SystemExit(f"нет моделей: {missing}")
+
     from openwakeword.model import Model
     model = Model(wakeword_models=paths, inference_framework="onnx")
     slugs = list(model.models.keys())
     print(f"детекторы: {slugs}   ·   порог боевого слушателя: {a.threshold}\n")
 
-    assistant = synth_assistant()
-    print(f"реплика ассистента: {len(assistant)/SR:.2f} с · «{ASSISTANT_LINE}»\n")
+    assistant = synth_assistant(a.resynth)
+    stim = os.path.join(OUT_DIR, "bargein-assistant.wav")
+    import hashlib
+    sha = hashlib.sha256(open(stim, "rb").read()).hexdigest()[:12]
+    # Отпечаток стимула печатается ВСЕГДА: он и есть доказательство, что два прогона мерили одно и
+    # то же. Разные отпечатки — числа несравнимы, сколько бы одинаково они ни выглядели.
+    print(f"реплика ассистента: {len(assistant)/SR:.2f} с · sha {sha} · «{ASSISTANT_LINE}»\n")
 
     if a.selfcheck:
         return 0 if selfcheck(model) else 1
 
     rows = []
     for slug in slugs:
-        name = to_16k_mono(pick_name_clip(slug))
+        name = to_16k_mono(pick_name_clip(base_slug(slug)))
         lead = np.zeros(int(2.5 * SR), dtype=np.float32)   # окно детектора 2.0 с должно наполниться
         tail = np.zeros(int(1.0 * SR), dtype=np.float32)
 
@@ -394,7 +433,7 @@ def main() -> int:
     cur = None
     for slug, cond, score in rows:
         if slug != cur:
-            print(f"\n=== {WORD[slug]} ===")
+            print(f"\n=== {WORD[base_slug(slug)]}  ·  модель {slug} ===")
             cur = slug
         fired = "СРАБОТАЛ БЫ" if score >= a.threshold else "молчит"
         control = cond.startswith("ТОЛЬКО")

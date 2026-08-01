@@ -117,9 +117,16 @@ def build_set(slug, other_slug, word):
 
 
 def main() -> int:
+    # ⚠️ ПРЕДШЕСТВЕННИК ОБЯЗАН БЫТЬ В СПИСКЕ. Набор называется «неизменным», но он неизменен только
+    # ПОКА не переобучали ЭТО имя: обучение перекладывает данные слуга, и оценочный набор меняется.
+    # Поймано числом 2026-08-01: `joy_v1_control` дал 73.7% до переобучения Джой и 35.0% после —
+    # файл модели тот же, набор другой. Значит сравнивать «новая против записанного в документе
+    # старого числа» НЕЛЬЗЯ; сравнивать можно только модели, прогнанные В ОДНОМ прогоне.
+    # `*_v4_prespeech` — снимок боевых моделей ДО обучения с речевым фоном (`plans/20` шаг 4).
     plan = [
-        ("jarvis", "joy", "Джарвис", ["jarvis", "jarvis_v3_short", "jarvis_v2_cross", "jarvis_v1_baseline"]),
-        ("joy", "jarvis", "Джой", ["joy", "joy_v1_control"]),
+        ("jarvis", "joy", "Джарвис",
+         ["jarvis", "jarvis_v4_prespeech", "jarvis_v3_short", "jarvis_v2_cross", "jarvis_v1_baseline"]),
+        ("joy", "jarvis", "Джой", ["joy", "joy_v4_prespeech", "joy_v1_control"]),
     ]
     for slug, other, word, models in plan:
         pos_p, neg_p, cross_p = build_set(slug, other, word)
