@@ -40,6 +40,12 @@ function arg(name, dflt) {
   return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : dflt;
 }
 const SLUG = arg('slug', 'jarvis');
+// Речевой фон необязателен: без него раскладка работает как раньше, но модель останется глухой к
+// перебиванию. Наличие проверяется, а не предполагается — пустой путь в конфиге уронил бы обучение
+// уже на аугментации, через десятки минут счёта.
+const speechBgDir = path.join(DATA_ROOT, 'background_speech');
+const speechBg = existsSync(speechBgDir) && readdirSync(speechBgDir).some((f) => f.endsWith('.wav'))
+  ? speechBgDir : null;
 const TEST_EVERY = Math.max(2, parseInt(arg('test-every', '10'), 10) || 10);
 
 // ⭐ ПЕРЕКРЁСТНЫЕ НЕГАТИВЫ — положительные клипы ДРУГОГО активатора, поданные как отрицательные.
@@ -238,11 +244,20 @@ rir_paths:
 # ⛔ Не AudioSet и не FMA, как в ноутбуке апстрима: обе ссылки протухли (проверено 2026-07-31 —
 # AudioSet переехал на parquet, FMA стал датасетом-скриптом, которые выпилили в datasets 5.x).
 # Здесь шумы из RIRS_NOISES (openslr 28): точечные из MUSAN + изотропные из RWCP/REVERB/AIR.
+#
+# ⭐ ВТОРОЙ ПУТЬ — РЕЧЬ САМОГО АССИСТЕНТА (bugs/25, plans/20 шаг 4). Замер researches/23 §0 показал,
+# что активатор ломает НЕ шум: широкополосный шум ему безразличен (0.92–0.98 даже при +12 дБ), а
+# конкурирующая речь глушит наглухо (0.005/0.102 при равных уровнях). Учили их именно так — шумовая
+# аугментация была, чужой речи не было. Материал собирает wakeword-speech-background.mjs; имён
+# активаторов в тех фразах нет и быть не может (иначе учили бы игнорировать собственное имя).
+# Кратность 8 подобрана по счёту файлов: 1260 шумовых против 150 речевых, то есть 150×8 ≈ 1200 —
+# примерно половина обращений к фону приходится на речь. Подмешивается это при SNR от −10 дБ
+# (openwakeword/data.py:645), значит боевой случай «ассистент звучит не тише человека» покрыт.
 background_paths:
-  - "${yml(path.join(DATA_ROOT, 'background'))}"
+  - "${yml(path.join(DATA_ROOT, 'background'))}"${speechBg ? `\n  - "${yml(speechBg)}"` : ''}
 
 background_paths_duplication_rate:
-  - 1
+  - 1${speechBg ? '\n  - 8' : ''}
 
 false_positive_validation_data_path: "${yml(path.join(DATA_ROOT, 'features', 'validation_set_features.npy'))}"
 
