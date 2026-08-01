@@ -87,18 +87,38 @@ function ensureBeep() {
   return BEEP;
 }
 
-// --- Воспроизведение с возможностью ПЕРЕБИТЬ ---
+// --- Воспроизведение ---
 // Ход держит своё состояние: перебили — оставшиеся фразы не играют вовсе, а текущая обрывается
 // смертью проигрывателя. Ссылка на процесс нужна именно для этого.
-let turn = null;          // {aborted, player, persona}
+let turn = null;          // {aborted, player, spoke, persona}
+
+function spawnPlayer(wav) {
+  return spawn('powershell', ['-NoProfile', '-Command', `(New-Object Media.SoundPlayer '${wav}').PlaySync()`], { windowsHide: true });
+}
+
+// Реплика ассистента: играет только пока ход не перебит, и регистрируется в ходе, чтобы её можно
+// было оборвать. `spoke` — было ли РЕАЛЬНО начато воспроизведение: без него отчёт врал о TTFA
+// (перебитый до первого звука ход печатал «⚡TTFA 51.7 с», хотя не прозвучало ни слова).
 function playWav(wav) {
   return new Promise((resolve) => {
     if (!play || turn?.aborted) return resolve();
-    const p = spawn('powershell', ['-NoProfile', '-Command', `(New-Object Media.SoundPlayer '${wav}').PlaySync()`], { windowsHide: true });
-    if (turn) turn.player = p;
+    const p = spawnPlayer(wav);
+    if (turn) { turn.player = p; turn.spoke = true; }
     p.on('error', () => resolve());
     p.on('close', () => { if (turn?.player === p) turn.player = null; resolve(); });
   });
+}
+
+// Бип «услышал» — сигнал СЛУШАТЕЛЯ, а не часть реплики, и живёт по своим правилам.
+// ⚠️ Раньше он шёл через `playWav`, и на ПЕРЕБИВАНИИ его не было вовсе: `playWav` отказывается
+// играть при `turn.aborted`, а перебивание как раз этот флаг и ставит. То есть подтверждение
+// пропадало ровно в тот момент, когда оно нужнее всего, — владелец на живом микрофоне так и
+// сказал: «почему то не срабатыва… а вот теперь сработал пик» (`homeworks/04`, `bugs/25`).
+// Заодно бип больше не может занять `turn.player` и увести на себя следующее перебивание.
+function playBeep() {
+  if (!play) return;
+  const p = spawnPlayer(BEEP);
+  p.on('error', () => { /* нет звукового устройства — бип не критичен для хода */ });
 }
 
 function bargeIn(detector, score) {
@@ -118,7 +138,7 @@ async function handleUtterance(persona, wav) {
   const earsMs = performance.now() - t0;
   console.log(`🎤 Ты → ${persona.name}: ${heard}`);
 
-  turn = { aborted: false, player: null, persona };
+  turn = { aborted: false, player: null, spoke: false, persona };
   const state = turn;
   try {
     const r = await runTurn({
@@ -137,8 +157,16 @@ async function handleUtterance(persona, wav) {
       if (s.reason === 'nothing-to-say') console.log(`(не озвучено: «${s.text}» — ни букв, ни цифр, bugs/06)`);
       else console.error(`РОТ споткнулся на «${s.text}»: ${s.reason}`);
     }
-    const ttfa = r.ttfaMs === null ? '—' : sec(earsMs + r.ttfaMs);
-    console.log(`[тайминги] уши ${sec(earsMs)} с · ядро ${sec(r.coreMs)} с · всего ${sec(earsMs + r.totalMs)} с · ⚡TTFA ${ttfa} с`);
+    // TTFA — «время до первого ЗВУКА», поэтому у хода, перебитого раньше первого звука, его нет.
+    // Конвейер отмечает момент, когда фраза ГОТОВА к воспроизведению, и не знает, что дирижёр её
+    // проглотил, — судим по собственному наблюдению (`state.spoke`), а не по намерению конвейера.
+    // В тихом прогоне (`--no-play`) звука нет вовсе, но число полезно харнессу — отдаём его с
+    // честной подписью «готовность», а не как время до звука, которого не было.
+    const ttfa = r.ttfaMs === null ? '—'
+      : !play ? `${sec(earsMs + r.ttfaMs)} с (без звука: готовность)`
+        : state.spoke ? `${sec(earsMs + r.ttfaMs)} с` : '—';
+    console.log(`[тайминги] уши ${sec(earsMs)} с · ядро ${sec(r.coreMs)} с · всего ${sec(earsMs + r.totalMs)} с · ⚡TTFA ${ttfa}`);
+    if (state.aborted && !state.spoke) console.log('   (ответ не прозвучал — перебит до первого звука)');
   } catch (e) {
     console.error(String(e.message || e));
   } finally {
@@ -210,7 +238,8 @@ readline.createInterface({ input: listener.stdout }).on('line', (line) => {
     if (!bargeIn(m.detector, m.score)) console.log(`\n🔔 ${persona.name} (${m.score})`);
     // Сигнал «услышал» (решение владельца). Не ждём его окончания: слушатель уже пишет фразу.
     // Замер 2026-08-01: 0.36 с накладных на запуск проигрывателя + 0.15 с самого тона.
-    if (play) playWav(BEEP);
+    // Бип звучит ВСЕГДА, в том числе на перебивании: именно там он и подтверждает, что услышан.
+    playBeep();
     return;
   }
   if (m.event === 'empty') { console.log('   (только имя — жду вопроса)'); return; }
