@@ -133,3 +133,7 @@ Desktop.ini
 .kaif/install/
 KAIF_UPDATE_TASK.superseded.md
 .kaif/heartbeat.log
+
+# помощник AEC собирается из исходника (tools/voice/aec-capture/build.ps1) — бинарник в git не нужен
+tools/voice/aec-capture/*.exe
+tools/voice/aec-capture/*.obj
