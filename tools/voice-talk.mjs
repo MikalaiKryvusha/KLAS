@@ -26,15 +26,15 @@
 //
 // ⚠️ Требуется ПОДНЯТЫЙ гейтвей OpenClaw (`powershell -File tools\klas.ps1 -Action up`).
 
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { TtsDaemon } from './voice/tts-daemon.mjs';
 import { gatewayAlive, gatewayToken, runTurn } from './voice/pipeline.mjs';
 import { acquireVoiceSession } from './voice/single-instance.mjs';
+import { hear } from './voice/ears.mjs';
 
-const HERE = import.meta.dirname;
 const OUT_DIR = 'F:\\KLAS\\voice\\out';
 const MIC_DEFAULT = 'Микрофон (NVIDIA Broadcast)';   // реальный мик владельца (шумодав NVIDIA)
 
@@ -55,12 +55,8 @@ const ears = flag('--ears') ?? 'ru';
 const play = !args.includes('--no-play');
 const sessionUser = `voice-${new Date().toISOString().slice(0, 10)}`;   // один день = одна беседа
 
-// --- УШИ: распознавание (разовый запуск; 1.3–1.7 с — резидент кандидат на Г4) ---
-function hear(wav) {
-  const r = spawnSync('node', [path.join(HERE, 'voice-hear.mjs'), wav, '--model', ears], { encoding: 'utf8', timeout: 300_000, windowsHide: true });
-  if (r.status !== 0) throw new Error(`УШИ упали: ${(r.stderr || '').slice(-200)}`);
-  return r.stdout.trim();
-}
+// УШИ (разовый запуск; 1.3–1.7 с — резидент кандидат на Г4) переехали в `voice/ears.mjs`, когда у
+// них появился второй потребитель — диспетчер активаторов `voice-wake.mjs`.
 
 // --- Воспроизведение: асинхронное, чтобы не блокировать чтение потока от ядра ---
 function playWav(wav) {
@@ -99,7 +95,7 @@ async function turn(tts, { wav, text }) {
   const tMic = performance.now();
   let heard = text;
   if (!heard) {
-    heard = hear(wav);
+    heard = hear(wav, ears);
     if (!heard) { console.log('(тишина — ничего не распознано)'); return; }
   }
   const earsMs = performance.now() - tMic;

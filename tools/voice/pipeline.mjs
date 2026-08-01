@@ -92,8 +92,12 @@ export async function gatewayAlive() {
  * @param {string}   o.outDir    куда писать wav фраз
  * @param {Function} o.playFn    (wav, meta) => Promise — воспроизведение; бенч подменяет проверкой
  * @param {Function} [o.onText]  колбэк на каждую готовую фразу (для печати в чат)
+ * @param {string}   [o.style]   префикс хода; дефолт — голосовой стиль. Диспетчер активаторов
+ *   (`tools/voice-wake.mjs`) подставляет сюда «промпт персоны + голосовой стиль»: имя, которым
+ *   позвали, выбирает не только голос, но и характер (идея 05). Префикс идёт В КАЖДОМ ходе по той же
+ *   причине, что и сам VOICE_STYLE, — локальная модель забывает роль, заданную один раз за сессию.
  */
-export async function runTurn({ tts, question, user, outDir, playFn, onText }) {
+export async function runTurn({ tts, question, user, outDir, playFn, onText, style = VOICE_STYLE }) {
   const t0 = performance.now();
   const res = await fetch(GATEWAY_URL, {
     method: 'POST',
@@ -102,7 +106,7 @@ export async function runTurn({ tts, question, user, outDir, playFn, onText }) {
       model: 'openclaw/default',
       stream: true,
       user,
-      messages: [{ role: 'user', content: `${VOICE_STYLE}\n${question}` }],
+      messages: [{ role: 'user', content: `${style}\n${question}` }],
     }),
   });
   if (!res.ok) throw new Error(`ЯДРО ответило HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);

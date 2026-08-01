@@ -88,9 +88,12 @@ export class TtsDaemon {
   }
 
   /** Синтезировать фразу в файл. Возвращает ответ сайдкара: {ok, audio_sec, t_synth_sec} либо
-   *  {ok:false, reason:'nothing-to-say'} — в тексте нет ни букв, ни цифр (bugs/06): это НЕ поломка. */
-  say(text, outWav) {
-    return this.#request({ text, out: outWav, voice: this.voice, ...(this.voiceEn ? { voice_en: this.voiceEn } : {}) });
+   *  {ok:false, reason:'nothing-to-say'} — в тексте нет ни букв, ни цифр (bugs/06): это НЕ поломка.
+   *  `voice` переопределяет диктора НА ОДИН вызов: сайдкар берёт его из запроса, а модель v5_ru
+   *  общая для всех дикторов — значит две персоны (`personas.mjs`) обслуживаются ОДНИМ резидентом,
+   *  без второго процесса и второй загрузки модели. */
+  say(text, outWav, voice = null) {
+    return this.#request({ text, out: outWav, voice: voice ?? this.voice, ...(this.voiceEn ? { voice_en: this.voiceEn } : {}) });
   }
 
   stop() { try { this.#proc?.stdin.end('quit\n'); } catch { /* уже мёртв */ } }
