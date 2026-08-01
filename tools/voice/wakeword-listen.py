@@ -308,7 +308,10 @@ def main() -> int:
     ap.add_argument("--wav", default=None, help="прогон из файла вместо микрофона")
     ap.add_argument("--realtime", action="store_true",
                     help="выдавать кадры файла в темпе живой речи (нужно для проверок, зависящих от времени)")
-    ap.add_argument("--detectors", default="jarvis,joy")
+    # Список поднимаемых детекторов = ключи персон (`tools/voice/personas.mjs`). Третье имя
+    # «Ариэль» добавлено владельцем 2026-08-01 как эксперимент по устойчивости к перебиванию
+    # (`plans/20`); Джой оставлена рядом намеренно — сравниваем два имени на одном стенде.
+    ap.add_argument("--detectors", default="jarvis,joy,ariel")
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--hang", type=float, default=0.9, help="секунд тишины = конец фразы")
     ap.add_argument("--wait", type=float, default=2.0, help="секунд ожидания речи после имени")
@@ -325,11 +328,19 @@ def main() -> int:
         return selftest()
 
     names = [s.strip() for s in a.detectors.split(",") if s.strip()]
-    paths = [os.path.join(TRAINED, f"{n}.onnx") for n in names]
-    missing = [p for p in paths if not os.path.exists(p)]
-    if missing:
-        out_line({"stage": "error", "reason": "no-models", "missing": missing})
+    # ⚠️ Отсутствующая модель — НЕ повод не запускаться. Имя может быть в списке персон, но ещё не
+    # обучено (так появилась «Ариэль»: персона заведена, модель считается). Прежний код валил весь
+    # слушатель, то есть новое имя в списке ломало РАЗГОВОР С УЖЕ РАБОТАЮЩИМИ. Пропуск объявляется
+    # вслух: молчаливо выпавший детектор — это «меня не слышат» без объяснения.
+    have = [n for n in names if os.path.exists(os.path.join(TRAINED, f"{n}.onnx"))]
+    skipped = [n for n in names if n not in have]
+    if skipped:
+        out_line({"stage": "warn", "reason": "model-not-trained", "detectors": skipped})
+    if not have:
+        out_line({"stage": "error", "reason": "no-models",
+                  "missing": [os.path.join(TRAINED, f"{n}.onnx") for n in names]})
         return 2
+    paths = [os.path.join(TRAINED, f"{n}.onnx") for n in have]
 
     from openwakeword.model import Model
     model = Model(wakeword_models=paths, inference_framework="onnx")

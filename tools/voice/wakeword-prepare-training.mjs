@@ -160,35 +160,45 @@ for (const c of clips) {
 
 // --- Перекрёстные негативы --------------------------------------------------------------------------
 let crossAdded = 0;
-if (CROSS) {
-  const crossDir = path.join(CORPUS_ROOT, CROSS);
-  const crossManifestPath = path.join(crossDir, 'manifest.clean.json');
-  if (!existsSync(crossManifestPath)) {
-    console.error(`❌ Нет ${crossManifestPath} — сначала собери и проверь корпус «${CROSS}».`);
-    process.exit(1);
-  }
-  const crossManifest = JSON.parse(readFileSync(crossManifestPath, 'utf8'));
+// ⚠️ ИМЁН СТАЛО БОЛЬШЕ ДВУХ (владелец добавил «Ариэль» 2026-08-01), и `--cross` теперь принимает
+// СПИСОК через запятую. Правило прежнее и от количества не зависит: каждая модель обязана видеть
+// клипы ВСЕХ чужих имён как отрицательные, иначе персоны путаются, а путаница хуже пропуска —
+// ассистент ответит не тем голосом. Бюджет чужих клипов делится между источниками поровну, чтобы
+// добавление третьего имени не перекосило баланс классов.
+const crossList = CROSS.split(',').map((s) => s.trim()).filter(Boolean);
+if (crossList.length) {
+  const budget = Math.round((counts.negative_train + counts.negative_test) * CROSS_RATIO);
+  const perSource = Math.max(1, Math.round(budget / crossList.length));
+  for (const cross of crossList) {
+    const crossDir = path.join(CORPUS_ROOT, cross);
+    const crossManifestPath = path.join(crossDir, 'manifest.clean.json');
+    if (!existsSync(crossManifestPath)) {
+      console.error(`❌ Нет ${crossManifestPath} — сначала собери и проверь корпус «${cross}».`);
+      process.exit(1);
+    }
+    const crossManifest = JSON.parse(readFileSync(crossManifestPath, 'utf8'));
 
-  // Берём ТОЛЬКО положительные чужого корпуса: именно они несут чужое имя, ради которого всё это.
-  // Чужие негативы брать незачем — они уже покрыты своими (тексты в генераторе общие).
-  const crossPos = crossManifest.clips
-    .filter((c) => c.file.startsWith('positive/'))
-    .sort((a, b) => a.file.localeCompare(b.file));
+    // Берём ТОЛЬКО положительные чужого корпуса: именно они несут чужое имя, ради которого всё это.
+    // Чужие негативы брать незачем — они уже покрыты своими (тексты в генераторе общие).
+    const crossPos = crossManifest.clips
+      .filter((c) => c.file.startsWith('positive/'))
+      .sort((a, b) => a.file.localeCompare(b.file));
 
-  const want = Math.min(crossPos.length, Math.round((counts.negative_train + counts.negative_test) * CROSS_RATIO));
-  // Прореживаем РАВНОМЕРНО по отсортированному списку, а не берём первые N: имя файла кодирует
-  // диктора, темп, обрамление и номер повтора, поэтому равномерный шаг сохраняет всё разнообразие,
-  // тогда как «первые N» дали бы один голос на одном темпе.
-  const step = crossPos.length / want;
-  for (let i = 0; i < want; i++) {
-    const c = crossPos[Math.floor(i * step)];
-    const isTest = i % TEST_EVERY === 0;
-    const key = `negative_${isTest ? 'test' : 'train'}`;
-    // Префикс `cross__` в имени — чтобы в каталоге было ВИДНО, откуда клип. Молчаливое смешение
-    // источников в одной папке потом не распутать.
-    copyFileSync(path.join(crossDir, c.file), path.join(dirs[key], `cross__${CROSS}__${path.basename(c.file)}`));
-    counts[key]++;
-    crossAdded++;
+    const want = Math.min(crossPos.length, perSource);
+    // Прореживаем РАВНОМЕРНО по отсортированному списку, а не берём первые N: имя файла кодирует
+    // диктора, темп, обрамление и номер повтора, поэтому равномерный шаг сохраняет всё разнообразие,
+    // тогда как «первые N» дали бы один голос на одном темпе.
+    const step = crossPos.length / want;
+    for (let i = 0; i < want; i++) {
+      const c = crossPos[Math.floor(i * step)];
+      const isTest = i % TEST_EVERY === 0;
+      const key = `negative_${isTest ? 'test' : 'train'}`;
+      // Префикс `cross__<имя>__` — чтобы в каталоге было ВИДНО, откуда клип. Молчаливое смешение
+      // источников в одной папке потом не распутать, а с тремя именами тем более.
+      copyFileSync(path.join(crossDir, c.file), path.join(dirs[key], `cross__${cross}__${path.basename(c.file)}`));
+      counts[key]++;
+      crossAdded++;
+    }
   }
 }
 
