@@ -46,16 +46,17 @@ const PEAK = 5000;
  * @param {number} amp    относительная амплитуда (0..1)
  * @param {number[]} partials обертоны как доли от основного тона: [1, 0.3] = основной + тихая октава
  */
-function tone(f, sec, attack, amp, partials = [1]) {
+function tone(f, sec, attack, amp, partials = [1], decaySoft = 1) {
   const n = Math.round(SR * sec);
   const out = new Float64Array(n);
   const aN = Math.max(1, Math.round(n * attack));
   for (let i = 0; i < n; i++) {
     // Нарастание — половина косинуса (без излома), спад — экспонента: так звучит удар по струне
-    // или колокольчик, а не включение генератора.
+    // или колокольчик, а не включение генератора. `decaySoft` растягивает спад: чем больше, тем
+    // дольше звук тает — именно быстрый спад ухо читает как удар, то есть как «остроту».
     const env = i < aN
       ? 0.5 * (1 - Math.cos((Math.PI * i) / aN))
-      : Math.exp(-3.2 * ((i - aN) / (n - aN)));
+      : Math.exp((-3.2 / decaySoft) * ((i - aN) / (n - aN)));
     let s = 0;
     for (let k = 0; k < partials.length; k++) s += partials[k] * Math.sin((2 * Math.PI * f * (k + 1) * i) / SR);
     out[i] = (s / partials.reduce((a, b) => a + b, 0)) * env * amp;
@@ -105,6 +106,51 @@ const CANDIDATES = {
   breath: () => tone(329.63, 0.45, 0.45, 0.85, [1, 0.4, 0.15]),
 };
 
+// ── Семейство «warm»: владелец выбрал его, но сказал «слишком острый» (2026-08-01) ──────────────
+// Острота у исходного `warm` берётся из двух мест, и варианты двигают их по отдельности, чтобы было
+// слышно, ЧТО именно её даёт:
+//   · третья гармоника — 392 × 3 ≈ 1176 Гц, она и звенит;
+//   · быстрый экспоненциальный спад — ухо читает его как удар, то есть перкуссию.
+// Плюс третья ось — высота: чем ниже основной тон, тем меньше «шила» при той же громкости.
+// Варианты описаны ДАННЫМИ, а не кодом, ради второго решения владельца (2026-08-01):
+//   «Если я не говорю и слушание прекращается, нужно в таком же тоне но снисходящим тоном проиграть
+//    звук — мне индикация, что слушание остановлено»
+// То есть у каждого звука обязан быть близнец ТОГО ЖЕ ТЕМБРА, но нисходящий. Держать их двумя
+// независимыми списками — верный способ, чтобы они разъехались: тембр правится в одном месте, а
+// близнец остаётся старым. Поэтому спецификация одна, а строителя два.
+const WARM_SPECS = {
+  // 1. Тот же аккорд, но БЕЗ третьей гармоники. Проверяем, вся ли острота в ней.
+  'warm-plain': { lo: 392, hi: 587.33, sec: 0.55, attack: 0.35, partials: [1, 0.25], soft: 1, hiAmp: 0.3 },
+  // 2. На кварту ниже: та же форма, меньше «шила».
+  'warm-low': { lo: 293.66, hi: 440, sec: 0.6, attack: 0.35, partials: [1, 0.25], soft: 1, hiAmp: 0.3 },
+  // 3. Медленная атака и ДЛИННЫЙ спад: звук вплывает и тает, а не ударяет.
+  'warm-slow': { lo: 392, hi: 587.33, sec: 0.9, attack: 0.55, partials: [1, 0.2], soft: 1.4, hiAmp: 0.3 },
+  // 4. Вместо квинты — тихая ОКТАВА: она не даёт биений, звучит ровнее.
+  'warm-octave': { lo: 349.23, hi: 698.46, sec: 0.65, attack: 0.4, partials: [1, 0.2], soft: 1, hiAmp: 0.18 },
+  // 5. Квинта СНИЗУ: интервал тот же, центр тяжести ниже.
+  'warm-under': { lo: 261.63, hi: 392, sec: 0.62, attack: 0.4, partials: [1, 0.18], soft: 1.1, hiAmp: 0.55 },
+  // 6. Самый мягкий: низко, очень медленная атака, долгий хвост, чистые синусы.
+  'warm-velvet': { lo: 261.63, hi: 392, sec: 1.0, attack: 0.6, partials: [1], soft: 1.6, hiAmp: 0.35 },
+};
+
+/** ОТКРЫТИЕ слушания: обе ноты вместе — спокойный аккорд, приглашение говорить. */
+const openChime = (s) => mix([
+  tone(s.lo, s.sec, s.attack, 1, s.partials, s.soft),
+  tone(s.hi, s.sec * 0.92, s.attack + 0.05, s.hiAmp, [1], s.soft),
+]);
+
+/** ЗАКРЫТИЕ слушания: тот же тембр, но ноты идут ВНИЗ по очереди — «перестал слушать».
+ *  Нисходящий ход человек читает как завершение; тембр общий, поэтому пара слышится как одна семья. */
+const closeChime = (s) => concat([
+  tone(s.hi, s.sec * 0.42, s.attack * 0.8, 0.85, s.partials, s.soft),
+  tone(s.lo, s.sec * 0.85, s.attack, 1, s.partials, s.soft),
+]);
+
+const WARM = Object.fromEntries(Object.entries(WARM_SPECS).flatMap(([n, s]) => [
+  [n, () => openChime(s)],
+  [`${n}-off`, () => closeChime(s)],
+]));
+
 function toWav(samples) {
   const pcm = Buffer.alloc(samples.length * 2);
   for (let i = 0; i < samples.length; i++) {
@@ -123,23 +169,28 @@ const play = (file) => spawnSync('powershell', ['-NoProfile', '-Command',
 
 // ── Сборка ───────────────────────────────────────────────────────────────────
 mkdirSync(OUT, { recursive: true });
-const names = Object.keys(CANDIDATES);
+// Семейство выбирается флагом: `--warm` собирает и склеивает ВАРИАНТЫ выбранного владельцем звука,
+// чтобы на выслушке рядом стояли только сравнимые вещи, а не всё подряд.
+const FAMILY = { ...CANDIDATES, ...WARM };
+// В склейку идут ПАРАМИ: сразу за открывающим звуком его закрывающий близнец. Слушать их порознь
+// бессмысленно — владелец выбирает не два звука, а одну семью, и важно, узнаётся ли родство на слух.
+const names = args.includes('--warm') ? Object.keys(WARM) : Object.keys(CANDIDATES);
 
 if (playArg && playArg !== 'all') {
   const f = path.join(OUT, `${playArg}.wav`);
-  if (!CANDIDATES[playArg]) { console.error(`нет варианта «${playArg}». Есть: ${names.join(', ')}`); process.exit(1); }
-  writeFileSync(f, toWav(CANDIDATES[playArg]()));
+  if (!FAMILY[playArg]) { console.error(`нет варианта «${playArg}». Есть: ${Object.keys(FAMILY).join(', ')}`); process.exit(1); }
+  writeFileSync(f, toWav(FAMILY[playArg]()));
   console.log(`играю «${playArg}»`);
   play(f);
   process.exit(0);
 }
 
-for (const n of names) writeFileSync(path.join(OUT, `${n}.wav`), toWav(CANDIDATES[n]()));
+for (const n of names) writeFileSync(path.join(OUT, `${n}.wav`), toWav(FAMILY[n]()));
 
 // Склейка на выслушку: пауза 1.2 с между вариантами — достаточно, чтобы ухо отпустило предыдущий,
 // и мало, чтобы не забыть его. Порядок печатается: без него склейка бесполезна.
-const glued = concat(names.flatMap((n, i) => (i ? [silence(1.2), CANDIDATES[n]()] : [CANDIDATES[n]()])));
-const allFile = path.join(OUT, 'all.wav');
+const glued = concat(names.flatMap((n, i) => (i ? [silence(1.2), FAMILY[n]()] : [FAMILY[n]()])));
+const allFile = path.join(OUT, args.includes('--warm') ? 'all-warm.wav' : 'all.wav');
 writeFileSync(allFile, toWav(glued));
 
 console.log(`Варианты сигнала «слушаю» — ${OUT}`);

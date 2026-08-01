@@ -376,6 +376,9 @@ def main() -> int:
               "source": src_name, "device": src_dev})
 
     listening = True
+    speaking = False        # говорит ли сейчас сам ассистент (объявляет дирижёр, `bugs/26`)
+    quiet_wait = 0          # сколько кадров ждём реальной тишины после конца своей речи
+    QUIET_MAX = 8           # потолок ожидания ≈ 0.64 с: звук гаснет не мгновенно, но и не вечно
     capture = None
     preroll = collections.deque(maxlen=PREROLL_FRAMES)
     noise_win = collections.deque(maxlen=NOISE_FRAMES)
@@ -406,10 +409,34 @@ def main() -> int:
                 if listening and not was:
                     model.reset()      # буфер держит чужой звук — иначе он «догорит» уже после снятия глушения
                 out_line({"stage": "listen", "on": listening})
+            # ⛔ «Сейчас говорю сам» (`bugs/26`). Дирижёр объявляет это перед первым звуком ответа и
+            # снимает, убив проигрывателя. Пока флаг поднят, захват фразы НЕ КОПИТ КАДРЫ: иначе в
+            # вопрос владельца попадает хвост собственной речи из динамика, уши честно его
+            # расшифровывают, и в ядро уезжает каша. Детекция при этом продолжает работать —
+            # перебивание именем никуда не девается.
+            if c.get("cmd") == "speaking":
+                speaking = bool(c.get("on", False))
 
         level = float(np.abs(audio).mean())
 
         if capture is not None:
+            # ── Отложенный старт: не пишем, пока в комнате звучим МЫ (`bugs/26`) ──
+            # Захват уже «взведён» (детекция сработала), но кадры копить нельзя: пока говорит
+            # динамик, в них лежит наш собственный голос. Ждём двух вещей подряд — объявления
+            # дирижёра «я замолчал» И реально тихого кадра, потому что объявление приходит по трубе,
+            # а буфер операционной системы доигрывает после убийства проигрывателя.
+            if capture.get("pending"):
+                if speaking:
+                    continue
+                quiet_wait += 1
+                if level >= capture["ep"].on and quiet_wait < QUIET_MAX:
+                    continue                      # ещё звучит наш хвост — ждём
+                capture["pending"] = False
+                capture["frames"] = []            # предзапись заведомо чужая: выбрасываем
+                out_line({"event": "capture-start", "detector": capture["detector"],
+                          "waited_frames": quiet_wait})
+                quiet_wait = 0
+
             capture["frames"].append(audio)
             verdict = capture["ep"].feed(level)
             if verdict in ("done", "max", "empty"):
@@ -443,7 +470,10 @@ def main() -> int:
             "frames": list(preroll),
             "ep": Endpointer(noise=float(np.median(noise_win)) if noise_win else 0.0,
                              wait_sec=a.wait, hang_sec=a.hang, max_sec=a.max),
+            # Перебили посреди нашей же реплики ⇒ захват взведён, но ждёт тишины (`bugs/26`).
+            "pending": speaking,
         }
+        quiet_wait = 0
         preroll.clear()
 
     # Поток кончился. Для файла это норма, для микрофона — отказ, и молчать о нём нельзя:
