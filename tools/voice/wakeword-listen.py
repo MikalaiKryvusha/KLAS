@@ -430,6 +430,27 @@ def main() -> int:
             # вопрос владельца попадает хвост собственной речи из динамика, уши честно его
             # расшифровывают, и в ядро уезжает каша. Детекция при этом продолжает работать —
             # перебивание именем никуда не девается.
+            # ⭐ ОКНО ПРОДОЛЖЕНИЯ (`ideas/19`, требование владельца 2026-08-01): после своей реплики
+            # ассистент сам начинает слушать — БЕЗ имени. Механика та же, что после срабатывания
+            # детектора, поэтому здесь не новая подсистема, а второй способ ВЗВЕСТИ тот же захват:
+            # ждём начала речи `--wait` секунд, пишем фразу, ловим конец тем же автоматом.
+            # Персона приходит от дирижёра: разговор продолжается с тем, с кем начат.
+            if c.get("cmd") == "followup":
+                det = c.get("detector")
+                if det in model.models and capture is None:
+                    capture = {
+                        "detector": det,
+                        "frames": [],
+                        "ep": Endpointer(noise=float(np.median(noise_win)) if noise_win else 0.0,
+                                         wait_sec=a.wait, hang_sec=a.hang, max_sec=a.max),
+                        # Приглашающий сигнал играет прямо сейчас — значит захват сразу взведён и ждёт
+                        # тишины, иначе он запишет сам сигнал (тот же дефект, что уже ловили).
+                        "pending": True,
+                        "followup": True,
+                    }
+                    quiet_wait = 0
+                    preroll.clear()
+                    out_line({"stage": "followup", "detector": det, "seconds": a.wait})
             if c.get("cmd") == "speaking":
                 speaking = bool(c.get("on", False))
                 # ⚠️ ГОНКА, которую видно только вживую. Сигнал «услышал» играет ТОТ ЖЕ дирижёр и
@@ -471,13 +492,17 @@ def main() -> int:
             verdict = capture["ep"].feed(level)
             if verdict in ("done", "max", "empty"):
                 det = capture["detector"]
+                followup = bool(capture.get("followup"))
                 if verdict == "empty":
-                    out_line({"event": "empty", "detector": det, "reason": "no-speech"})
+                    # Из окна продолжения пустота значит «разговор окончен», а не «сказали только имя».
+                    out_line({"event": "empty", "detector": det,
+                              "reason": "followup-timeout" if followup else "no-speech"})
                 else:
                     wav = os.path.join(a.out_dir, f"wake-{det}-{int(time.time() * 1000)}.wav")
                     sec = write_wav(wav, capture["frames"])
-                    out_line({"event": "utterance", "detector": det, "wav": wav,
-                              "sec": round(sec, 2), "reason": "silence" if verdict == "done" else "max"})
+                    out_line({"event": "utterance", "detector": det, "wav": wav, "sec": round(sec, 2),
+                              "reason": ("followup" if followup else
+                                         ("silence" if verdict == "done" else "max"))})
                 capture = None
                 model.reset()          # звук вопроса не должен догорать в окне детектора
             continue

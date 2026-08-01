@@ -83,6 +83,10 @@ for (const [slug, opt] of [['jarvis', '--voice-jarvis'], ['joy', '--voice-joy']]
 // звук — мне индикация, что слушание остановлено».
 const chimeOpenName = flag('--chime-open') ?? 'bell';
 const chimeCloseName = flag('--chime-close') ?? 'bell-deep';
+// Окно продолжения (`plans/21`) включено по умолчанию — это и есть требование владельца. Флаг
+// существует, потому что механика МЕНЯЕТ разговор, и вернуть прежнее поведение нужно уметь без
+// правки кода (шаг 5 плана).
+const followupEnabled = !args.includes('--no-followup');
 let CHIME_OPEN = null;
 let CHIME_CLOSE = null;
 function ensureChimes() {
@@ -151,6 +155,19 @@ function playChime(file) {
   p.on('close', done);
 }
 
+// ⭐ ОКНО ПРОДОЛЖЕНИЯ (`ideas/19`). Владелец 2026-08-01: «после реплики джарвиса не было сигнала,
+// приглашающего меня произвести фразу. Нужно чтобы оно автоматически само запускало слушание и
+// сигналом меня приглашало». Имя после этого нужно только чтобы НАЧАТЬ разговор или СМЕНИТЬ персону.
+//
+// Порядок важен: сначала приглашающий сигнал, потом команда слушателю. Слушатель заводит захват уже
+// взведённым и ждёт тишины, поэтому сигнал не попадёт в запись и не съест окно (тот же механизм,
+// что спас от записи собственной речи, `bugs/26`).
+function openFollowup(persona) {
+  playChime(CHIME_OPEN);
+  try { listener?.stdin.write(`{"cmd":"followup","detector":"${persona.slug}"}\n`); }
+  catch { /* слушатель мёртв — выход и так идёт */ }
+}
+
 function bargeIn(detector, score) {
   if (!turn || turn.aborted) return false;
   turn.aborted = true;
@@ -200,6 +217,11 @@ async function handleUtterance(persona, wav) {
         : state.spoke ? `${sec(earsMs + r.ttfaMs)} с` : '—';
     console.log(`[тайминги] уши ${sec(earsMs)} с · ядро ${sec(r.coreMs)} с · всего ${sec(earsMs + r.totalMs)} с · ⚡TTFA ${ttfa}`);
     if (state.aborted && !state.spoke) console.log('   (ответ не прозвучал — перебит до первого звука)');
+
+    // Шаг 3 плана 21: ответ прозвучал — приглашаем продолжить БЕЗ имени.
+    // ⛔ Не открываем окно у ПЕРЕБИТОГО хода: там человек уже говорит следующей персоне, и
+    // приглашение было бы ложью, а второй захват столкнулся бы с идущим.
+    if (followupEnabled && !state.aborted) openFollowup(persona);
   } catch (e) {
     console.error(String(e.message || e));
   } finally {
@@ -272,6 +294,14 @@ readline.createInterface({ input: listener.stdout }).on('line', (line) => {
     return;
   }
   if (m.stage === 'error') { console.error(`Слушатель отказал: ${JSON.stringify(m)}`); process.exitCode = 1; return; }
+  // Окно продолжения открылось. Печатаем ВСЛУХ: сигнала мало — человек должен видеть, сколько у
+  // него времени и с кем он продолжает говорить (`plans/21`, критерий «видно, что окно открыто»).
+  if (m.stage === 'followup') {
+    const p = personaByDetector(m.detector);
+    console.log(`   🎧 говори дальше без имени — ${p?.name ?? m.detector} слушает ${m.seconds} с`);
+    return;
+  }
+  if (m.stage === 'warn') { console.error(`[слушатель] ${JSON.stringify(m)}`); return; }
   if (m.stage === 'eof') { done = true; chain.then(() => shutdown(0)); return; }
 
   if (m.event === 'wake') {

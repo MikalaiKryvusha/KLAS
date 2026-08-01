@@ -27,6 +27,16 @@ const flag = (n, d) => { const i = args.indexOf(n); return i >= 0 && args[i + 1]
 const WAV = flag('--wav', 'F:\\KLAS\\voice\\out\\fixture-wake-jarvis.wav');
 const SPEAK_MS = Number(flag('--speak-ms', '1500'));
 
+// Режим `--followup`: проверяет ОКНО ПРОДОЛЖЕНИЯ (`plans/21`) — то, что после ответа ассистент
+// слушает БЕЗ имени. Фикстурой сквозь `voice-wake` это не проверить: пока ядро думает свои
+// двадцать секунд, звуковой файл давно кончается, и окно открывается в пустоту. Здесь роль
+// дирижёра играет скрипт: он шлёт команду окна ровно тогда, когда нужно.
+const FOLLOWUP = args.includes('--followup');
+// Чего ждём от окна: `speech` — человек заговорил и фраза ушла в ядро; `timeout` — промолчал, окно
+// закрылось. Оба исхода ПРАВИЛЬНЫЕ, и стенд обязан различать их, а не считать один провалом:
+// иначе он краснеет на исправном поведении и учит агента игнорировать свою же красноту.
+const EXPECT = flag('--expect', 'speech');
+
 const p = spawn(PY, [LISTENER, '--wav', WAV, '--realtime', '--parent'], { windowsHide: true });
 p.stderr.on('data', (d) => { const s = String(d).trim(); if (s) console.error(`[слушатель] ${s.slice(0, 200)}`); });
 
@@ -38,11 +48,20 @@ readline.createInterface({ input: p.stdout }).on('line', (line) => {
   let m; try { m = JSON.parse(line); } catch { return; }
 
   if (m.stage === 'ready') {
+    if (FOLLOWUP) {
+      // Как в бою: сначала приглашающий сигнал («я звучу»), сразу за ним команда окна.
+      console.log('дирижёр: приглашающий сигнал + окно продолжения');
+      p.stdin.write('{"cmd":"speaking","on":true}\n');
+      p.stdin.write('{"cmd":"followup","detector":"jarvis"}\n');
+      setTimeout(() => p.stdin.write('{"cmd":"speaking","on":false}\n'), 700);   // сигнал отзвучал
+      return;
+    }
     // Объявляем, что ассистент говорит, ДО первого кадра: именно в этом состоянии и ловится дефект.
     console.log('дирижёр: «я говорю»');
     p.stdin.write('{"cmd":"speaking","on":true}\n');
     return;
   }
+  if (m.stage === 'followup') { console.log(`окно открыто: ${m.detector}, ${m.seconds} с`); return; }
   if (m.event === 'wake') {
     wakeAt = Date.now();
     console.log(`услышано имя «${m.detector}» (${m.score}) — захват должен ОТЛОЖИТЬСЯ`);
@@ -66,6 +85,24 @@ readline.createInterface({ input: p.stdout }).on('line', (line) => {
 p.on('close', () => {
   const ok = [];
   const bad = [];
+  if (FOLLOWUP) {
+    // В окне продолжения имя НЕ звучит — в этом весь смысл. Судим по трём вещам: окно открылось,
+    // приглашающий сигнал в запись не попал, речь захвачена БЕЗ имени.
+    (captureStart ? ok : bad).push('окно открылось и захват отложен под сигнал');
+    if (captureStart) (captureStart.waited_frames > 0 ? ok : bad).push(`сигнал не записан (ждали ${captureStart.waited_frames} кадров)`);
+    if (EXPECT === 'timeout') {
+      (utterance?.empty ? ok : bad).push('промолчал — окно закрылось само');
+      (utterance?.reason === 'followup-timeout' ? ok : bad).push(`причина закрытия названа верно (${utterance?.reason})`);
+    } else {
+      (utterance && !utterance.empty ? ok : bad).push('фраза захвачена БЕЗ имени');
+      (utterance?.reason === 'followup' ? ok : bad).push(`помечена как продолжение (${utterance?.reason})`);
+    }
+    console.log(`\n=== Итог (окно продолжения, ждали «${EXPECT}») ===`);
+    for (const s of ok) console.log(`  OK    ${s}`);
+    for (const s of bad) console.log(`  ПРОВАЛ ${s}`);
+    if (utterance?.wav) console.log(`  файл: ${utterance.wav} (${utterance.sec} с)`);
+    process.exit(bad.length ? 1 : 0);
+  }
   (wakeAt ? ok : bad).push('имя услышано');
   if (!captureStart) bad.push('события capture-start НЕ было — захват не откладывался');
   else (captureStart.waited_frames > 0 ? ok : bad).push(`захват отложен (ждали ${captureStart.waited_frames} кадров)`);
