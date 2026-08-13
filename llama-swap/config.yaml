@@ -150,23 +150,25 @@ models:
       --temperature 0.6 --min-p 0.05 --reasoning off --cache-ram 0
     ttl: 300
 
-  # ⭐ Qwen2.5-Coder-14B-Instruct (2026-08-04): специализированная coder-модель для задач
-  # генерации и редактирования кода. SOTA среди open-source coder-моделей (сопоставима с GPT-4o
-  # на 32B), нативный контекст 128K (поддержка до 1M через YaRN).
+  # Qwen2.5-Coder-14B-Instruct — 🔬 КАНДИДАТ в coder-модель, ВНЕ канона стека: агентных бенчей
+  # и решения владельца пока нет (паспорт — researches/26; легитимизация — plans/25, дорожка Б).
+  # Скачана 2026-08-04 в эксперименте с локальным кодером для Zoo Code.
   #
-  # RTX 5070 Ti 16 GB: Q5_K_M весит ~9.8 ГБ, KV-кеш q4_1 @ 20K = ~1.2 ГБ, итого ~11 ГБ VRAM.
+  # Бюджет VRAM (арифметика в researches/26): веса Q5_K_M = 9.79 ГиБ (размер файла измерен),
+  # KV q8_0 ≈ 102 КиБ/токен (48 слоёв × 8 KV-голов × 128 dim × K+V).
+  #   -c 24576 → KV ≈ 2.4 ГиБ, итого ≈ 13.2 ГиБ + буферы — помещается в 16 ГиБ.
+  #   ⛔ Было -c 131072 (наследие слабой сессии 2026-08-04): KV ≈ 12.8 ГиБ, итого ≈ 23.5 ГиБ —
+  #   физически не помещалось в 16 ГиБ, профиль не мог загрузиться. Пересобран 2026-08-14.
+  # Сэмплинг унаследован от той же сессии (0.6/0.95/20) — сверить с generation_config при бенчах.
+  # [NOT-TESTED] пересобранный профиль под нагрузкой не проверялся (GPU занят, 4.6/16 ГиБ):
+  # загрузка + смоук — шаг Б1 в plans/25.
   #
-  # ФИКС скорости (2026-08-04 v2): контекст 20480 (вмещает промпт Zoo Code 15532 + история),
-  # Обновлено v2: 128K контекст (131072) для Zoo Code, KV квант q8_0 для стабильности агентики.
-  # Сэмплинг по официальной документации Qwen (qwen.readthedocs.io):
-  # --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0
-  #
-  # Связи: researches/26_qwen2.5-coder-14b-setup.md, LLMs/LLAMACPP_MODELS/Qwen2.5-Coder-14B-Instruct-Q5_K_M.gguf
+  # Связи: researches/26_qwen2.5-coder-14b-setup.md · plans/25 (дорожка Б)
   "qwen2.5-coder-14b":
     cmd: >
       F:\KLAS\llamacpp\llama-server.exe
       -m F:\KLAS\LLMs\LLAMACPP_MODELS\Qwen2.5-Coder-14B-Instruct-Q5_K_M.gguf
-      --port ${PORT} -c 131072 -ctk q8_0 -ctv q8_0
+      --port ${PORT} -c 24576 -ctk q8_0 -ctv q8_0
       -ngl 99 --flash-attn on -b 2048 -ub 1024 --jinja
       -np 1 --slots --cont-batching
       --temperature 0.6 --top-p 0.95 --top-k 20 --min-p 0
