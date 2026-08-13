@@ -5,7 +5,7 @@
 // модульная механика KAIF вклеивает АНГЛИЙСКИЕ модули шаблона прямо в переведённые русские
 // документы, порождая полный дубль на двух языках (у нас: PHILOSOPHY.md 20.7 → 31.0 КБ, 21 английский
 // модуль рядом с 21 русским; плюс скиллы /pause и /kaif-remove). Глазами это ловится плохо: файл
-// выглядит нормальным, пока не дойдёшь до середины. Разбор — KAIF_2.1_UPDATE_REPORT.md, дефекты D1/D3.
+// выглядит нормальным, пока не дойдёшь до середины. Разбор — reports/KAIF_UPDATES/01_KAIF_2.1_UPDATE_REPORT.md, дефекты D1/D3.
 //
 // Проверяет две вещи, каждая из которых УЖЕ ловила настоящий дефект:
 //   [1] двуязычное задвоение — секция без единой кириллической буквы внутри документа,
@@ -103,5 +103,5 @@ if (noAlias.length) {
 const doubled = skills.filter((s) => /««|»»/.test(readFileSync(join(skillsDir, s, 'SKILL.md'), 'utf8')));
 if (doubled.length) { problems += doubled.length; say(`  ❌ задвоенные кавычки в алиасах: ${doubled.join(' ')}`); }
 
-say(`\n${problems ? `❌ ДЕФЕКТОВ: ${problems} — см. KAIF_2.1_UPDATE_REPORT.md, D1 и D3` : '✅ обёртка чиста'}`);
+say(`\n${problems ? `❌ ДЕФЕКТОВ: ${problems} — см. reports/KAIF_UPDATES/01_KAIF_2.1_UPDATE_REPORT.md, D1 и D3` : '✅ обёртка чиста'}`);
 process.exit(problems ? 1 : 0);
