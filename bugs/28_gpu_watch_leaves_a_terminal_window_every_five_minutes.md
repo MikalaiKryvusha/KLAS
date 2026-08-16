@@ -73,11 +73,45 @@ keep it. Recorded here because it is exactly the "obvious" correction a future s
 
 ## Verification
 
-- [ ] Next three ticks produce no new `WindowsTerminal` process.
-- [ ] `logs/gpu-watch/*.jsonl` keeps receiving records — the observer still works.
-- [ ] The idle-time field still reflects the OWNER's session, not zero.
+- [x] Next three ticks produce no new `WindowsTerminal` process.
+- [x] `logs/gpu-watch/*.jsonl` keeps receiving records — the observer still works.
+- [x] The idle-time field still reflects the OWNER's session, not zero.
 
 Check: `tasklist /FI "IMAGENAME eq WindowsTerminal.exe"` after two ticks, and the journal's tail.
+
+---
+
+## ✅ ПРОВЕРЕНО И ЗАКРЫТО — 2026-08-16, агент проекта KLAS
+
+Владелец потребовал не переводить документ, а работать по нему («надо РАБОТАТЬ ПО НЕМУ И ФИКСИТЬ»).
+Ниже — что реально наблюдалось, а не что ожидалось.
+
+**Заплатка соседнего агента (`wscript` вместо `powershell`) держит.** Через несколько часов и
+десятки тиков расписания:
+
+```
+Get-Process WindowsTerminal        → 0 процессов
+Get-ScheduledTaskInfo KLAS-gpu-watch → последний запуск 21:04:58, результат 0
+tail logs/gpu-watch/2026-08-16.jsonl → записи идут, idle_s = 0..1 (сеанс ВЛАДЕЛЬЦА, не нуль-заглушка)
+```
+
+**Корень вылечен переездом, а не заплаткой.** Требование владельца из `ideas/21` исполнено:
+наблюдатель теперь сервис докера `gpu-manager` внутри стека KLAS (`docker-compose.yml`,
+код — `tools/gpu-manager.mjs`). У контейнера **нет консоли вообще**, поэтому «терминал по
+умолчанию» Windows нечего ему выдавать — окно не может появиться ни при каких настройках ОС.
+Это сильнее заплатки: `wscript` убирает консоль у ОДНОГО способа запуска, контейнер убирает саму
+возможность.
+
+**Что осталось от хостового датчика и почему.** `tools/gpu-watch.ps1` под задачей
+`KLAS-gpu-watch` продолжает работать до закрытия фазы 1 — он ЕДИНСТВЕННЫЙ источник величины «окно
+во весь экран», без которой нельзя судить правила C и C+B отбора эпика 26. Он больше не открывает
+окон (та же заплатка `wscript`). Правило выбрано → задача снимается совсем:
+`Unregister-ScheduledTask KLAS-gpu-watch`.
+
+**Класс дефекта, который стоит помнить:** «скрыть окно» и «не иметь консоли» — разные вещи.
+`-WindowStyle Hidden` прячет окно самого PowerShell, но не отменяет его потребность в КОНСОЛИ, а
+консоль на Windows 11 выдаёт Windows Terminal через DCOM — и она переживает породивший её процесс.
+Лечится сменой подсистемы (GUI вместо консольной) или уходом туда, где консоли нет вовсе.
 
 ## Links
 
