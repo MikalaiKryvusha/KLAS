@@ -21,8 +21,40 @@ const nearNum = (s, t, eps = 0.05) => nums(s).some((v) => Math.abs(v - t) <= eps
 const stripFence = (s) => (s || '').replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
 const firstJSON = (s) => { const m = stripFence(s).match(/\{[\s\S]*\}/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 
+// ⚠️ ПРИПУСК НА РАССУЖДЕНИЕ. Бюджеты `max_tokens` у задач ниже (20 · 60 · 80 · 120) выставлялись
+// в 2026-07 под модели, которые сразу пишут ОТВЕТ. Рассуждающая модель тратит этот бюджет на
+// размышление, ответ не помещается, и `content` приходит ПУСТЫМ — задача получает ноль, хотя
+// модель решила её верно.
+//
+// Оплачено 2026-08-16 на Qwen3.8-27B: тот же бенч дал 7.2/8.0 с погашенным рассуждением и 3.9/8.0
+// с включённым, причём обвалились ровно четыре задачи с самыми тесными бюджетами. Прямой замер
+// (задача топосорта, тот же вопрос):
+//     max_tokens=60  → потрачено 60, обрыв по длине, content ""      ← бенч ставит 0
+//     max_tokens=300 → потрачено 291, ответ «модель, сервер, докер, прокси» ✅ верно
+// То есть 3.9 измеряло ХАРНЕСС, а не модель.
+//
+// Лечение — припуск, а не расширение бюджетов руками: он определяется ОДИН раз пробой и равен нулю
+// для нерассуждающих моделей, поэтому прежние числа остаются сравнимыми до токена. `max_tokens` —
+// потолок, а не цель: модель без рассуждения останавливается своим стоп-токеном и припуска не
+// замечает.
+let REASONING_ALLOWANCE = 0;
+
+async function probeReasoning() {
+  const res = await fetch(`${BASE}/v1/chat/completions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: 'Сколько будет 17 умножить на 3? Ответь одним числом.' }], max_tokens: 600, temperature: 0.1 }),
+  });
+  if (!res.ok) return;
+  const m = (await res.json()).choices?.[0]?.message ?? {};
+  const thinks = Boolean((m.reasoning_content || '').trim()) || /<think>/i.test(m.content || '');
+  REASONING_ALLOWANCE = thinks ? 2000 : 0;
+  console.log(thinks
+    ? '⚙ модель рассуждает — к каждому бюджету добавлен припуск 2000 токенов (иначе ответ обрежется)'
+    : '⚙ модель не рассуждает — припуск 0, числа сравнимы с прежними прогонами');
+}
+
 async function chat(messages, { tools, max_tokens = 300, temperature = 0.1 } = {}) {
-  const body = { model: MODEL, messages, max_tokens, temperature };
+  const body = { model: MODEL, messages, max_tokens: max_tokens + REASONING_ALLOWANCE, temperature };
   if (tools) { body.tools = tools; body.tool_choice = 'auto'; }
   const res = await fetch(`${BASE}/v1/chat/completions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -171,6 +203,8 @@ const TASKS = [
 ];
 
 console.log(`\n═══ KLAS agent-bench v3 (градуированный) · модель: ${MODEL} · ${BASE} ═══`);
+// Проба ДО первой задачи: припуск обязан быть известен уже на самом тесном бюджете (20 токенов).
+await probeReasoning();
 let total = 0;
 for (const task of TASKS) {
   const t0 = Date.now();

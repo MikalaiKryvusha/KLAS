@@ -5,4 +5,7 @@
 @echo off
 for /f "delims=" %%i in ('where llama-swap 2^>nul') do set LS=%%i
 if "%LS%"=="" set LS=llama-swap
-start "" /b "%LS%" -config F:\KLAS\llama-swap\config.yaml -listen 127.0.0.1:8080
+:: -watch-config: перечитывать config.yaml при его изменении. Добавлен 2026-08-16, оплачено
+:: замешательством: правку профиля (включение размышления) llama-swap молча проигнорировал, потому
+:: что читает конфиг ТОЛЬКО при старте, а внешне всё выглядело как «модель не слушается флага».
+start "" /b "%LS%" -config F:\KLAS\llama-swap\config.yaml -listen 127.0.0.1:8080 -watch-config

@@ -18,11 +18,20 @@ const MODEL = 'qwen3.8-27b';
 // иначе «не думала» ничего не докажет: на тривиальном вопросе не думает никто.
 const Q = 'В корзине 3 ящика по 17 яблок и 2 ящика по 24 яблока. Сколько яблок всего? Ответь одним числом.';
 
+// ⚠️ УРОК, ОПЛАЧЕННЫЙ ЗДЕСЬ ЖЕ (2026-08-16, поправка владельца). Первая версия этого файла
+// проверяла ТОЛЬКО способы ВЫКЛЮЧИТЬ размышление — и на основании «не думает ни при каком флаге»
+// модель ушла на агентный бенч с погашенным рассуждением, набрала 7.2/8.0, и это было записано как
+// свойство модели. На самом деле так измерили НАСТРОЙКУ. Рассуждающую модель обязательно мерить
+// В ОБЕ СТОРОНЫ: доказательство «выключается» ничего не стоит без доказательства «включается».
 const CASES = [
   { name: 'без флагов вовсе', body: {} },
   { name: 'enable_thinking:false (как в конфиге сейчас)', body: { chat_template_kwargs: { enable_thinking: false } } },
   { name: 'reasoning_effort:none (карточка 3.8)', body: { reasoning_effort: 'none' } },
   { name: 'reasoning_effort:low', body: { reasoning_effort: 'low' } },
+  // ─── ВКЛЮЧИТЬ. Ради этих строк файл и переписан.
+  { name: '⭐ enable_thinking:TRUE', body: { chat_template_kwargs: { enable_thinking: true } } },
+  { name: '⭐ reasoning_effort:medium', body: { reasoning_effort: 'medium' } },
+  { name: '⭐ reasoning_effort:high', body: { reasoning_effort: 'high' } },
 ];
 
 async function ask(extra) {
