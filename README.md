@@ -73,7 +73,7 @@
 
 | Компонент | Реализация | Назначение |
 |---|---|---|
-| Движок инференса | [llama.cpp](https://github.com/ggml-org/llama.cpp) — `llama-server`, CUDA, сборка `b10167` | выполнение языковой модели на видеокарте |
+| Движок инференса | [llama.cpp](https://github.com/ggml-org/llama.cpp) — `llama-server`, CUDA, сборка `b10453` | выполнение языковой модели на видеокарте |
 | Менеджер моделей | [llama-swap](https://github.com/mostlygeek/llama-swap) — порт `8080` | загрузка модели по обращению и выгрузка после 300 с простоя; веб-пульт моделей на `/ui/` |
 | Ядро ассистента | [OpenClaw](https://github.com/openclaw/openclaw) на локальных моделях | агентный цикл ассистента: навыки, вызовы инструментов, сессии |
 | Голосовой тракт | [Silero](https://github.com/snakers4/silero-models) TTS + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT | KLAS говорит и слышит; процессор, офлайн (раздел 9) |
@@ -162,7 +162,7 @@ node F:\KLAS\tools\install.mjs
 
 | Компонент | Источник | Объём |
 |---|---|---|
-| движок llama.cpp сборки `b10167` (CUDA, Windows x64) | релиз GitHub | ~0.5 ГБ |
+| движок llama.cpp сборки `b10453` (CUDA, Windows x64) | релиз GitHub | ~0.5 ГБ |
 | модели GGUF из манифеста (четыре из Таблицы 2) | HuggingFace | 6.5…13.7 ГБ каждая, все вместе ~41 ГБ |
 | менеджер моделей llama-swap | winget | — |
 | базы знаний `.zim` | каталог Kiwix | по выбору пользователя |
@@ -529,7 +529,7 @@ Table 1 — Composition of the system
 
 | Component | Implementation | Purpose |
 |---|---|---|
-| Inference engine | [llama.cpp](https://github.com/ggml-org/llama.cpp) — `llama-server`, CUDA, build `b10167` | running the language model on the GPU |
+| Inference engine | [llama.cpp](https://github.com/ggml-org/llama.cpp) — `llama-server`, CUDA, build `b10453` | running the language model on the GPU |
 | Model manager | [llama-swap](https://github.com/mostlygeek/llama-swap) — port `8080` | loading a model upon request and unloading after 300 s of idleness; model web UI at `/ui/` |
 | Assistant core | [OpenClaw](https://github.com/openclaw/openclaw) on the local models | the agent loop of the assistant: skills, tool calls, sessions |
 | Voice pipeline | [Silero](https://github.com/snakers4/silero-models) TTS + [GigaAM-v3](https://github.com/salute-developers/GigaAM) STT | KLAS speaks and hears; CPU, offline (section 9) |
@@ -622,7 +622,7 @@ Table 3 — Downloaded components
 
 | Component | Source | Size |
 |---|---|---|
-| the llama.cpp engine, build `b10167` (CUDA, Windows x64) | GitHub release | ~0.5 GB |
+| the llama.cpp engine, build `b10453` (CUDA, Windows x64) | GitHub release | ~0.5 GB |
 | GGUF models of the manifest (four of Table 2) | HuggingFace | 6.5…13.7 GB each, ~41 GB all together |
 | the llama-swap model manager | winget | — |
 | `.zim` knowledge bases | the Kiwix catalog | at the user's choice |
