@@ -208,6 +208,14 @@ if ($SelfTest) {
 
 # --- Journal ------------------------------------------------------------------------------------
 
+# SURVIVE Ctrl-C. Paid for on the day this was written (bugs/27): the watcher kept dying after a few
+# minutes with exit code 0xC000013A = STATUS_CONTROL_C_EXIT, every time the owner's session ran other
+# console commands -- a console control event is broadcast to the whole process group attached to the
+# console, and a long-running -File script takes it as "terminate". This flag turns Ctrl-C into plain
+# input instead of a kill signal. It cannot save us from CTRL_CLOSE_EVENT, which is why the scheduled
+# task ALSO repeats every 5 minutes: the flag is the cure, the repetition is the seatbelt.
+try { [Console]::TreatControlCAsInput = $true } catch { }
+
 # SINGLE INSTANCE. Two watchers would interleave lines in one journal, and a replay cannot tell
 # the halves apart afterwards. A named mutex is the built-in way: it dies with the process, so
 # there is no stale lock file to clean up after a crash or a reboot. (KLAS already paid for this
