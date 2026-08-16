@@ -49,45 +49,71 @@ const DESKTOP = new Set([
 
 // ─── Правила-кандидаты (три варианта вопроса Q1 из `interviews/013`) ──────────────────────────
 // Каждое получает состояние карты в момент времени и отвечает «карта занята владельцем?».
+//
+// Поле `needs` — ВХОДЫ, без которых правило судить НЕЛЬЗЯ. Оно появилось 2026-08-16 вместе с
+// контейнерным наблюдателем (`gpu-manager`): из докера сеансовые величины владельца недостижимы
+// по устройству, и правило на `fs` там молча вычислялось бы в «никогда не занято» — то есть
+// показало бы ноль ложных тревог и выглядело бы ЛУЧШЕ всех, ничего не измерив. Отсутствие входа
+// обязано дисквалифицировать правило, а не награждать его.
 function makeRules(baselineMiB) {
   return [
     {
       key: 'A',
       title: 'любой чужой процесс на карте',
       note: 'вариант Q1-A интервью 013',
+      needs: ['procs'],
       fn: (s) => [...s.procs].some((p) => !OURS.has(p)),
     },
     {
       key: 'A-lite',
       title: 'чужой процесс ВНЕ списка рабочего стола',
       note: 'A, смягчённое списком имён — показывает цену такого списка',
+      needs: ['procs'],
       fn: (s) => [...s.procs].some((p) => !OURS.has(p) && !DESKTOP.has(p)),
     },
     {
       key: 'B',
       title: `память > базовой на 1024 МиБ ИЛИ утилизация >= 30%`,
       note: 'вариант Q1-B интервью 013',
+      needs: [],
       fn: (s) => s.mem_used - baselineMiB >= 1024 || s.util_gpu >= 30,
     },
     {
       key: 'B-util',
       title: 'утилизация >= 30% (только она)',
       note: 'половина B — проверяем, что даёт память сверх утилизации',
+      needs: [],
       fn: (s) => s.util_gpu >= 30,
     },
     {
       key: 'C',
       title: 'окно переднего плана во весь экран',
       note: 'вариант Q1-C интервью 013',
+      needs: ['fs'],
       fn: (s) => s.fs === true,
     },
     {
       key: 'C+B',
       title: 'полный экран ИЛИ утилизация >= 30%',
       note: 'составное: полный экран ловит кино, утилизация — рендер в окне',
+      needs: ['fs'],
       fn: (s) => s.fs === true || s.util_gpu >= 30,
     },
   ];
+}
+
+// Что журнал ФАКТИЧЕСКИ содержит. Величина считается доступной, если хоть одна живая строка её
+// принесла: контейнерный датчик не пишет свои сеансовые поля вовсе, а не пишет в них нули.
+function journalProvides(states) {
+  const have = new Set();
+  for (const s of states) {
+    if (s.stop) continue;
+    if (s.has_fs) have.add('fs');
+    if (s.has_fg) have.add('fg');
+    if (s.has_idle) have.add('idle');
+    if (s.has_procs) have.add('procs');
+  }
+  return have;
 }
 
 // ─── Разбор журнала ───────────────────────────────────────────────────────────────────────────
@@ -126,6 +152,7 @@ function buildStates(recs) {
     states.push({
       ts: new Date(r.ts),
       ev: r.ev,
+      src: r.src || 'host',
       mem_used: r.mem_used,
       util_gpu: r.util_gpu,
       fs: r.fs === true,
@@ -133,6 +160,12 @@ function buildStates(recs) {
       klas: r.klas || '',
       idle_s: r.idle_s,
       procs: new Set(procs),
+      // ИЗМЕРЕНО или ОТСУТСТВУЕТ — это разные вещи, и различить их можно только здесь, до того как
+      // `fs: r.fs === true` превратит отсутствующее поле в честное на вид `false`.
+      has_fs: r.fs !== undefined,
+      has_fg: r.fg !== undefined,
+      has_idle: r.idle_s !== undefined,
+      has_procs: r.nproc !== undefined || Array.isArray(r.procs),
       stop: false,
     });
   }
@@ -180,8 +213,11 @@ function summary(states, files) {
   let bytes = 0;
   for (const f of files) bytes += fs.statSync(f).size;
 
+  const provides = journalProvides(states);
+  const sources = [...new Set(alive.map((s) => s.src))].join(', ');
+
   console.log('═══ СВОДКА ЖУРНАЛА ═══');
-  console.log(`  файлов: ${files.length} · строк: ${states.length} · объём: ${(bytes / 1024).toFixed(1)} КиБ`);
+  console.log(`  источник: ${sources} · файлов: ${files.length} · строк: ${states.length} · объём: ${(bytes / 1024).toFixed(1)} КиБ`);
   console.log(`  окно: ${first.toISOString()} … ${last.toISOString()}  (${hours.toFixed(2)} ч)`);
   if (hours > 0) {
     const perDay = bytes / 1024 / (hours / 24);
@@ -209,8 +245,17 @@ function summary(states, files) {
   const maxMem = Math.max(...alive.map((s) => s.mem_used));
   const maxUtil = Math.max(...alive.map((s) => s.util_gpu));
   console.log(`  память: базовая ${base} МиБ · пик ${maxMem} МиБ · пик утилизации ${maxUtil}%`);
-  const fsSec = intervals(alive, last).filter((i) => i.s.fs).reduce((a, i) => a + (i.to - i.from) / 1000, 0);
-  console.log(`  во весь экран: ${(fsSec / 60).toFixed(1)} мин`);
+  if (provides.has('fs')) {
+    const fsSec = intervals(alive, last).filter((i) => i.s.fs).reduce((a, i) => a + (i.to - i.from) / 1000, 0);
+    console.log(`  во весь экран: ${(fsSec / 60).toFixed(1)} мин`);
+  }
+  // Молчать о недостающем нельзя: «0.0 мин во весь экран» и «полный экран не измеряется» —
+  // разные утверждения, и второе меняет то, какие правила вообще участвуют в отборе.
+  const missing = ['fs', 'fg', 'idle', 'procs'].filter((k) => !provides.has(k));
+  if (missing.length) {
+    console.log(`  ⚠️  НЕ ИЗМЕРЯЕТСЯ этим источником: ${missing.join(', ')} — сеансовые величины владельца`);
+    console.log('      из контейнера недостижимы по устройству (см. шапку tools/gpu-manager.mjs).');
+  }
   console.log('');
 }
 
@@ -240,8 +285,11 @@ function suggestEpisodes(states, last) {
   console.log('═══ КАНДИДАТЫ В ЭПИЗОДЫ (черновик для Ш4) ═══');
   for (const m of merged) {
     const min = (m.to - m.from) / 60e3;
+    // Имя окна — подсказка разметчику, а не факт правила. Когда источник его не даёт (контейнер),
+    // столбец убирается совсем: пустое «окно:» читалось бы как «окна не было».
+    const fgs = [...m.fgs].filter(Boolean).join(',');
     console.log(`  ${m.from.toISOString()} … ${m.to.toISOString()}  ${min.toFixed(1)} мин · ` +
-      `пик util ${m.peakUtil}% · пик память ${m.peakMem} МиБ · окно: ${[...m.fgs].join(',')}`);
+      `пик util ${m.peakUtil}% · пик память ${m.peakMem} МиБ` + (fgs ? ` · окно: ${fgs}` : ''));
   }
   console.log('');
 }
@@ -252,10 +300,28 @@ function replay(states, episodes, busyFrac) {
   const alive = states.filter((s) => !s.stop);
   const last = states[states.length - 1].ts;
   const ints = intervals(alive, last);
-  const rules = makeRules(baselineMem(alive));
+  const allRules = makeRules(baselineMem(alive));
+  const provides = journalProvides(alive);
+
+  // Дисквалификация до счёта, а не после: правило без входа не «набирает ноль ошибок», оно
+  // ВООБЩЕ не участвует. Иначе отбор возглавит то, что ничего не измеряло.
+  const rules = allRules.filter((r) => r.needs.every((n) => provides.has(n)));
+  const skipped = allRules.filter((r) => !r.needs.every((n) => provides.has(n)));
 
   console.log('═══ ПРОГОН ПРАВИЛ ПО ЭПИЗОДАМ ═══');
-  console.log(`  порог вердикта: правило считается сказавшим «занято», если так было ≥ ${(busyFrac * 100).toFixed(0)}% времени эпизода\n`);
+  console.log(`  порог вердикта: правило считается сказавшим «занято», если так было ≥ ${(busyFrac * 100).toFixed(0)}% времени эпизода`);
+  if (skipped.length) {
+    console.log('  ⛔ НЕ СУДИМ (в журнале нет их входа):');
+    for (const r of skipped) {
+      const lack = r.needs.filter((n) => !provides.has(n)).join(', ');
+      console.log(`      ${r.key.padEnd(7)} ${r.title} — не хватает: ${lack}`);
+    }
+  }
+  console.log('');
+  if (!rules.length) {
+    console.log('  ни одно правило не судимо по этому журналу — отбор невозможен.\n');
+    return;
+  }
 
   const score = new Map(rules.map((r) => [r.key, { falseAlarm: 0, missed: 0, ok: 0 }]));
 
@@ -324,6 +390,16 @@ function selftest() {
     { from: new Date(t0 + 30 * 60e3).toISOString(), to: new Date(t0 + 60 * 60e3).toISOString(), class: 'game' },
   ];
 
+  // Контейнерный журнал: те же события, но БЕЗ сеансовых полей — так их пишет gpu-manager.
+  const dockerRecs = [
+    { ts: new Date(t0).toISOString(), ev: 'start', src: 'docker', mem_used: 1000, util_gpu: 2, klas: '' },
+    mk(30, { src: 'docker', mem_used: 7000, util_gpu: 92 }),
+    mk(60, { src: 'docker', mem_used: 1020, util_gpu: 2 }),
+  ];
+  const hostHas = journalProvides(states);
+  const dockerHas = journalProvides(buildStates(dockerRecs));
+  const dockerJudged = rules.filter((r) => r.needs.every((n) => dockerHas.has(n))).map((r) => r.key);
+
   const verdict = (ruleKey, ep) => {
     const r = rules.find((x) => x.key === ruleKey);
     const from = new Date(ep.from), to = new Date(ep.to);
@@ -347,6 +423,23 @@ function selftest() {
     ['C опознаёт игру', verdict('C', episodes[1]) === true],
     // Вес по ВРЕМЕНИ, а не по числу строк: две строки простоя против двух строк игры дали бы 50/50.
     ['вклад строки измеряется временем', Math.abs(ints[2].to - ints[2].from) / 60e3 === 15],
+    // Журнал хоста обязан отдавать все четыре сеансовые величины — иначе следующие два случая
+    // доказывали бы отсутствие входа там, где его просто не записали.
+    ['журнал хоста даёт fs/fg/idle/procs', ['fs', 'fg', 'idle', 'procs'].every((k) => hostHas.has(k))],
+    // ГЛАВНОЕ: правило без входа обязано быть ДИСКВАЛИФИЦИРОВАНО, а не тихо посчитано «свободно».
+    // Без этого C и C+B на контейнерном журнале показали бы НОЛЬ ложных тревог и возглавили отбор,
+    // не измерив ничего.
+    ['контейнерный журнал не даёт fs', !dockerHas.has('fs')],
+    // Судимы ровно два — B и B-util. Дисквалифицированы ЧЕТЫРЕ: C и C+B (нет `fs`), A и A-lite
+    // (нет списка процессов — из контейнера виден только собственный Xwayland прослойки WSL2).
+    ['по контейнерному журналу судимы ровно 2 правила из 6', dockerJudged.length === 2],
+    ['правила на fs дисквалифицированы, а не обнулены',
+      !dockerJudged.includes('C') && !dockerJudged.includes('C+B')],
+    ['правила на список процессов тоже дисквалифицированы',
+      !dockerJudged.includes('A') && !dockerJudged.includes('A-lite')],
+    // А правила, которым хватает одной карты, обязаны судиться и там.
+    ['правила B и B-util судимы по контейнерному журналу',
+      dockerJudged.includes('B') && dockerJudged.includes('B-util')],
   ];
 
   let bad = 0;
@@ -366,19 +459,33 @@ if (argv.includes('--selftest')) selftest();
 
 let epPath = path.join(LOG_DIR, 'episodes.json');
 let busyFrac = 0.5;
+// Наблюдателей ДВА, пока не закрыта фаза 1, и у каждого свой каталог. Смешивать их в одну ленту
+// нельзя: разрывы считаются по одному источнику, а склейка показала бы сплошное покрытие там, где
+// каждый датчик по отдельности умирал.
+//   host   — tools/gpu-watch.ps1, сеанс владельца: единственный, кто видит «во весь экран»
+//   docker — сервис gpu-manager внутри KLAS: только карта, зато без окон и внутри проекта
+const SOURCES = { host: LOG_DIR, docker: path.join(LOG_DIR, 'docker') };
+let source = 'host';
 const files = [];
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--episodes') { epPath = argv[++i]; continue; }
   if (argv[i] === '--busy-frac') { busyFrac = Number(argv[++i]); continue; }
+  if (argv[i] === '--source') { source = argv[++i]; continue; }
   files.push(argv[i]);
 }
 if (!files.length) {
-  if (!fs.existsSync(LOG_DIR)) {
-    console.error(`нет каталога ${LOG_DIR} — наблюдатель ещё не запускался (tools/gpu-watch.ps1)`);
+  const dir = SOURCES[source];
+  if (!dir) {
+    console.error(`неизвестный источник «${source}» — допустимы: ${Object.keys(SOURCES).join(', ')}`);
     process.exit(1);
   }
-  for (const f of fs.readdirSync(LOG_DIR).sort()) {
-    if (f.endsWith('.jsonl')) files.push(path.join(LOG_DIR, f));
+  if (!fs.existsSync(dir)) {
+    console.error(`нет каталога ${dir} — наблюдатель «${source}» ещё не запускался` +
+      (source === 'host' ? ' (tools/gpu-watch.ps1)' : ' (docker compose up -d gpu-manager)'));
+    process.exit(1);
+  }
+  for (const f of fs.readdirSync(dir).sort()) {
+    if (f.endsWith('.jsonl')) files.push(path.join(dir, f));
   }
 }
 if (!files.length) {
