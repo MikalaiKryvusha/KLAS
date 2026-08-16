@@ -12,6 +12,7 @@
     "guard:dry-run": "node tools/dry-run-guard.mjs",
     "guard:anonymize": "node tools/anonymize.mjs --selftest",
     "guard:encoding": "node tools/encoding-guard.mjs",
+    "guard:ps1": "node tools/ps1-encoding-guard.mjs",
     "owner:questions": "node tools/owner-questions.mjs",
     "guard:questions": "node tools/questions-guard.mjs",
     "review": "node tools/review.mjs",

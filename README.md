@@ -88,22 +88,26 @@
 
 1. Перечень моделей приведён в Таблице 2. Модель выбирается по имени в поле `model` запроса;
    менеджер моделей загружает её автоматически и выгружает после 300 секунд простоя.
-2. Основной моделью является `qwen3.6-35b-a3b` — выбрана за ум при достаточной скорости. Остальные
-   модели являются запасными и специализированными.
+2. Основной моделью является `qwen3.8-27b`. Набор моделей сокращён 16 августа 2026 года до двух:
+   специализированные и запасные профили удалены, поскольку уступают основной модели по уму.
 3. Настройки каждой модели — контекст, сэмплинг, кванты — зафиксированы в
-   `llama-swap/config.yaml`. У основной модели существует алиас `qwen3.6-35b-a3b-r` (повторный
-   вызов того же экземпляра), у `gemma-4-12b` — профиль `gemma-4-12b-norep` без штрафов за повтор.
+   `llama-swap/config.yaml`. У обеих моделей существует алиас с суффиксом `-r` (повторный вызов
+   того же экземпляра).
+4. Выбор кванта ограничен объёмом видеопамяти: для плотной модели на 27 миллиардов параметров
+   четырёхбитные кванты в 16 ГиБ не помещаются по весам, поэтому применён трёхбитный `UD-Q3_K_XL`.
+   Расчёт приведён в `researches/27`.
 
 Таблица 2 — Модели
 
 | Имя модели (API) | Модель и квант | Контекст, токенов | Роль |
 |---|---|---|---|
-| `qwen3.6-35b-a3b` | Qwen3.6-35B-A3B, UD-IQ3_S | 98 304 | **основная** |
-| `qwythos-9b` | Qwythos-9B, Q5_K_M | 262 144 | очень длинные документы |
-| `qwen3.5-35b` | Qwen3.5-35B-A3B, UD-IQ3_S | 98 304 | запасная (прежняя основная) |
-| `qwen3.6-27b` | Qwen3.6-27B, UD-IQ3_XXS | 65 536 | плотная запасная |
-| `ornith-35b` | Ornith-1.0-35B, IQ3_XXS | 49 152 | быстрая генерация коротких задач |
-| `gemma-4-12b` | Gemma-4-12B, UD-Q4_K_XL | 131 072 | мультимодальная (зрение) |
+| `qwen3.8-27b` | Qwen3.8-27B, UD-Q3_K_XL | 49 152 | **основная** |
+| `qwen3.6-35b-a3b` | Qwen3.6-35B-A3B, UD-IQ3_S | 98 304 | запасная, быстрая генерация |
+
+Время загрузки модели с пустой видеокарты составляет около 80 секунд и определяется размером файла,
+а не архитектурой. Обе модели по этому показателю равны. Способы сокращения времени загрузки и
+порядок их проверки приведены в `researches/28`; замер выполняется командой
+`node tools/cold-ttft.mjs <имя модели>`.
 
 ---
 
@@ -138,8 +142,10 @@ node F:\KLAS\tools\install.mjs
 4. Вопросы мастера: выбор модели — Qwythos-9B (~6 ГБ, рекомендуется) и/или Gemma-4-12B (~7 ГБ);
    выбор баз знаний из живого каталога Kiwix с названием, размером и числом статей. Во всех
    вопросах Enter выбирает рекомендуемый вариант.
-5. Основная модель `qwen3.6-35b-a3b` (~13.7 ГБ) мастером не предлагается; она устанавливается
-   полным развёртыванием по правилам раздела 3.4.
+5. Модель `qwen3.6-35b-a3b` (~13.7 ГБ) мастером не предлагается; она устанавливается полным
+   развёртыванием по правилам раздела 3.4. ⚠️ Мастер и манифест развёртывания по состоянию на
+   16 августа 2026 года ещё не переведены на новую основную модель `qwen3.8-27b` (Таблица 2) и
+   предлагают прежний набор.
 6. До начала скачивания мастер называет смету («Будет скачано ~N ГБ») и требует подтверждения.
 7. Установку допускается прервать и запустить заново: мастер продолжает с места остановки
    (прогресс хранится в файле `.deploy-state.json`; флаг `--reset` начинает установку заново).
@@ -176,9 +182,10 @@ node F:\KLAS\tools\deploy.mjs --apply    # развёртывание по ма�
    сумма, она проверяется.
 3. Флаг `--items a,b,c` ограничивает развёртывание перечисленными элементами манифеста
    `tools/deploy.manifest.json`. Мастер установки пользуется этим же движком.
-4. Полное развёртывание без `--items` устанавливает четыре модели манифеста — основную
-   `qwen3.6-35b-a3b`, `qwen3.5-35b`, `qwythos-9b`, `gemma-4-12b` — а также голосовой тракт и ядро
-   ассистента. Модели `qwen3.6-27b` и `ornith-35b` в манифест не входят и добавляются отдельно.
+4. Полное развёртывание без `--items` устанавливает четыре модели манифеста — `qwen3.6-35b-a3b`,
+   `qwen3.5-35b`, `qwythos-9b`, `gemma-4-12b` — а также голосовой тракт и ядро ассистента.
+   ⚠️ Состав манифеста отражает набор моделей до сокращения 16 августа 2026 года (Таблица 2);
+   приведение манифеста к новому набору — открытая задача.
 
 ### 3.5. Анонимная копия
 
@@ -330,7 +337,7 @@ docker restart kiwix_wikipedia                  # подхватить нову�
 
 1. Любой OpenAI-совместимый клиент — Zoo Code и прочие — подключается так: Base URL
    `https://<ваша-машина>.ts.net/llm/v1`, API Key — Bearer-ключ из `caddy/PASSWORD.local.txt`,
-   модель `qwen3.6-35b-a3b` либо другая из Таблицы 2.
+   модель `qwen3.8-27b` либо другая из Таблицы 2.
 2. Проверка с любого устройства:
 
 ```bash
@@ -423,8 +430,9 @@ $py = "voice\venv-wakeword\Scripts\python.exe"
 1. Система проверяется только на Windows 11 x64 с видеокартой NVIDIA. Пути ярлыков, трея и
    автозапуска жёстко привязаны к каталогу `F:\KLAS`; установка в другой каталог ломает ярлыки и
    автозапуск.
-2. Мастер устанавливает модели Qwythos-9B и/или Gemma-4-12B. Основная модель `qwen3.6-35b-a3b`
-   устанавливается только полным развёртыванием (раздел 3.4).
+2. Мастер устанавливает модели Qwythos-9B и/или Gemma-4-12B; модель `qwen3.6-35b-a3b` —
+   только полное развёртывание (раздел 3.4). ⚠️ Ни то, ни другое ещё не переведено на основную
+   модель `qwen3.8-27b` (Таблица 2).
 3. Выбор «установить анонимно» в мастере обезличивает копию и проверяет результат; имя автора
    остаётся только в файле `LICENSE` — этого требуют условия MIT (раздел 3.5).
 4. Разговор по имени работает, но живого разбора владельцем ещё не проходил. Пока ассистент
@@ -536,22 +544,26 @@ Table 1 — Composition of the system
 
 1. The models are given in Table 2. A model is selected by its name in the `model` field of a
    request; the model manager loads it automatically and unloads it after 300 seconds of idleness.
-2. The main model is `qwen3.6-35b-a3b` — chosen for intelligence at sufficient speed. The remaining
-   models are fallback and specialized ones.
+2. The main model is `qwen3.8-27b`. The set of models was reduced to two on 16 August 2026: the
+   specialized and fallback profiles were deleted, as they are inferior to the main model in
+   intelligence.
 3. The settings of each model — context, sampling, quants — are fixed in `llama-swap/config.yaml`.
-   The main model has the alias `qwen3.6-35b-a3b-r` (a retry of the same instance), and
-   `gemma-4-12b` has the profile `gemma-4-12b-norep` without repetition penalties.
+   Both models have an alias with the `-r` suffix (a retry of the same instance).
+4. The choice of quant is limited by the amount of video memory: for a dense model of 27 billion
+   parameters, four-bit quants do not fit into 16 GiB by weights alone, and therefore the three-bit
+   `UD-Q3_K_XL` is used. The calculation is given in `researches/27`.
 
 Table 2 — Models
 
 | Model name (API) | Model and quant | Context, tokens | Role |
 |---|---|---|---|
-| `qwen3.6-35b-a3b` | Qwen3.6-35B-A3B, UD-IQ3_S | 98 304 | **main** |
-| `qwythos-9b` | Qwythos-9B, Q5_K_M | 262 144 | very long documents |
-| `qwen3.5-35b` | Qwen3.5-35B-A3B, UD-IQ3_S | 98 304 | fallback (the former main) |
-| `qwen3.6-27b` | Qwen3.6-27B, UD-IQ3_XXS | 65 536 | dense fallback |
-| `ornith-35b` | Ornith-1.0-35B, IQ3_XXS | 49 152 | fast generation of short tasks |
-| `gemma-4-12b` | Gemma-4-12B, UD-Q4_K_XL | 131 072 | multimodal (vision) |
+| `qwen3.8-27b` | Qwen3.8-27B, UD-Q3_K_XL | 49 152 | **main** |
+| `qwen3.6-35b-a3b` | Qwen3.6-35B-A3B, UD-IQ3_S | 98 304 | fallback, fast generation |
+
+The time to load a model onto an empty video card is about 80 seconds and is determined by the file
+size rather than by the architecture. Both models are equal by this measure. The ways to reduce the
+loading time and the order of their verification are given in `researches/28`; the measurement is
+performed by the command `node tools/cold-ttft.mjs <model name>`.
 
 ---
 
@@ -588,8 +600,10 @@ node F:\KLAS\tools\install.mjs
 4. The wizard's questions: the choice of the model — Qwythos-9B (~6 GB, recommended) and/or
    Gemma-4-12B (~7 GB); the choice of knowledge bases from the live Kiwix catalog with the title,
    the size and the number of articles. In every question Enter selects the recommended option.
-5. The main model `qwen3.6-35b-a3b` (~13.7 GB) is not offered by the wizard; it is installed by
-   the full deployment in accordance with section 3.4.
+5. The `qwen3.6-35b-a3b` model (~13.7 GB) is not offered by the wizard; it is installed by the full
+   deployment in accordance with section 3.4. ⚠️ As of 16 August 2026 the wizard and the deployment
+   manifest have not yet been moved to the new main model `qwen3.8-27b` (Table 2) and still offer
+   the former set.
 6. Before downloading, the wizard states the estimate ("~N GB will be downloaded") and requires a
    confirmation.
 7. The installation is permitted to be interrupted and started again: the wizard continues from
@@ -628,10 +642,10 @@ node F:\KLAS\tools\deploy.mjs --apply    # deployment by the manifest, including
    is set, it is verified.
 3. The `--items a,b,c` flag limits the deployment to the listed elements of the
    `tools/deploy.manifest.json` manifest. The installation wizard uses this same engine.
-4. A full deployment without `--items` installs the four models of the manifest — the main
+4. A full deployment without `--items` installs the four models of the manifest —
    `qwen3.6-35b-a3b`, `qwen3.5-35b`, `qwythos-9b`, `gemma-4-12b` — as well as the voice pipeline
-   and the assistant core. The `qwen3.6-27b` and `ornith-35b` models are not part of the manifest
-   and are added separately.
+   and the assistant core. ⚠️ The composition of the manifest reflects the set of models before the
+   reduction of 16 August 2026 (Table 2); bringing the manifest to the new set is an open task.
 
 ### 3.5. An anonymous copy
 
@@ -786,7 +800,7 @@ Table 5 — Entry points
 
 1. Any OpenAI-compatible client — Zoo Code and others — is connected as follows: Base URL
    `https://<your-machine>.ts.net/llm/v1`, API Key — the Bearer key from
-   `caddy/PASSWORD.local.txt`, the model `qwen3.6-35b-a3b` or another one from Table 2.
+   `caddy/PASSWORD.local.txt`, the model `qwen3.8-27b` or another one from Table 2.
 2. Verification from any device:
 
 ```bash
@@ -883,8 +897,9 @@ $py = "voice\venv-wakeword\Scripts\python.exe"
 1. The system is verified only on Windows 11 x64 with an NVIDIA GPU. The paths of the shortcuts,
    the tray and the autostart are bound to the `F:\KLAS` directory; installation into another
    directory breaks the shortcuts and the autostart.
-2. The wizard installs the Qwythos-9B and/or Gemma-4-12B models. The main model
-   `qwen3.6-35b-a3b` is installed only by the full deployment (section 3.4).
+2. The wizard installs the Qwythos-9B and/or Gemma-4-12B models; the `qwen3.6-35b-a3b` model is
+   installed only by the full deployment (section 3.4). ⚠️ Neither has yet been moved to the
+   `qwen3.8-27b` main model (Table 2).
 3. The "install anonymously" choice in the wizard de-identifies the copy and verifies the result;
    the author's name is left only in the `LICENSE` file, as the MIT terms require (section 3.5).
 4. The conversation by name works but has not yet passed the owner's live scrutiny. While the
