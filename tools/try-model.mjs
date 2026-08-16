@@ -2,8 +2,12 @@
 // tools/try-model.mjs — попробовать модель с Hugging Face одной командой (идея 06):
 // скачивает GGUF (с докачкой), гонит скоростной бенч и печатает сниппет для llama-swap.
 //
-// Запуск: node tools/try-model.mjs <hf-repo> <файл.gguf>
+// Запуск: node tools/try-model.mjs <hf-repo> <файл.gguf> [--no-bench]
 // Пример: node tools/try-model.mjs unsloth/Qwen3.6-27B-MTP-GGUF Qwen3.6-27B-UD-IQ3_XXS.gguf
+//
+// --no-bench — только скачать, БЕЗ скоростного бенча. Нужен, когда видеокарта занята человеком или
+// другой задачей: скачивание это сеть и диск, а llama-bench — это GPU. Разделение оплачено полем
+// 2026-08-16 (владелец работал на карте, а бенч ждал конца загрузки, чтобы её захватить).
 //
 // После добавления сниппета в llama-swap/config.yaml и перезапуска llama-swap «ум» меряется:
 //   node tools/agent-bench.mjs <alias>
@@ -15,8 +19,10 @@ import { execFileSync } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 
-const [repo, file] = process.argv.slice(2);
-if (!repo || !file) { console.error('Использование: node tools/try-model.mjs <hf-repo> <файл.gguf>'); process.exit(1); }
+const argv = process.argv.slice(2);
+const NO_BENCH = argv.includes('--no-bench');
+const [repo, file] = argv.filter((a) => !a.startsWith('--'));
+if (!repo || !file) { console.error('Использование: node tools/try-model.mjs <hf-repo> <файл.gguf> [--no-bench]'); process.exit(1); }
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MODELS_DIR = join(ROOT, 'LLMs', 'LLAMACPP_MODELS');
@@ -37,9 +43,14 @@ if (existsSync(dest)) {
   console.log(`✓ скачано: ${(statSync(dest).size / 1e9).toFixed(2)} GB`);
 }
 
-// 2. Скоростной бенч (pp512/tg128, GPU, flash attention)
-console.log('\n— скоростной бенч (llama-bench) —');
-execFileSync('powershell', ['-File', join(ROOT, 'tools', 'bench-model.ps1'), '-Model', dest], { stdio: 'inherit' });
+// 2. Скоростной бенч (pp512/tg128, GPU, flash attention) — пропускается при --no-bench
+if (NO_BENCH) {
+  console.log('\n— бенч пропущен (--no-bench): видеокарта не тронута —');
+  console.log(`  когда GPU освободится: powershell -File tools\\bench-model.ps1 -Model ${dest}`);
+} else {
+  console.log('\n— скоростной бенч (llama-bench) —');
+  execFileSync('powershell', ['-File', join(ROOT, 'tools', 'bench-model.ps1'), '-Model', dest], { stdio: 'inherit' });
+}
 
 // 3. Сниппет для llama-swap
 const alias = basename(file, '.gguf').toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/(^-|-$)/g, '');
