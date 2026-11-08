@@ -11,3 +11,7 @@
 
 *.sh   text eol=lf
 *.bat  text eol=crlf
+
+# Исходники логотипа — в Git LFS (решение владельца 2026-11-08)
+logo/KLAS.psd filter=lfs diff=lfs merge=lfs -text
+logo/KLAS_ORIGIN_2x.png filter=lfs diff=lfs merge=lfs -text
